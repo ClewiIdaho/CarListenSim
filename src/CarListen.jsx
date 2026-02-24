@@ -279,15 +279,18 @@ export default function CarListen() {
     uniforms: { tDiffuse: { value: null }, intensity: { value: 0 }, time: { value: 0 } },
     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform float intensity; uniform float time; varying vec2 vUv;
-      float rand(vec2 co){ return fract(sin(dot(co,vec2(12.9898,78.233)))*43758.5453); }
       void main(){
         vec4 c=texture2D(tDiffuse,vUv);
         if(intensity>0.01){
           vec2 center=vec2(0.5,0.5); vec2 dir=vUv-center; float dist=length(dir);
-          float streak=rand(vec2(atan(dir.y,dir.x)*20.0,floor(time*10.0)))*dist*intensity;
-          vec2 blurUv=vUv-normalize(dir)*streak*0.02;
-          c=mix(c,texture2D(tDiffuse,blurUv),min(streak*2.0,0.4));
-          c.rgb+=vec3(streak*0.15);
+          float radialBlur=dist*intensity*0.015;
+          vec2 blurDir=normalize(dir)*radialBlur;
+          vec4 sum=c;
+          sum+=texture2D(tDiffuse,vUv-blurDir*0.25);
+          sum+=texture2D(tDiffuse,vUv-blurDir*0.5);
+          sum+=texture2D(tDiffuse,vUv-blurDir*0.75);
+          sum+=texture2D(tDiffuse,vUv-blurDir);
+          c=sum/5.0;
         }
         gl_FragColor=c;
       }`
@@ -311,7 +314,7 @@ export default function CarListen() {
     composer.addPass(bloomPass);
     const vignettePass = new ShaderPass(VignetteShader); composer.addPass(vignettePass);
     const chromaPass = new ShaderPass(ChromaticAberrationShader); composer.addPass(chromaPass);
-    const grainPass = new ShaderPass(FilmGrainShader); composer.addPass(grainPass);
+    // Film grain pass removed for clean image
     const colorPass = new ShaderPass(ColorGradeShader); composer.addPass(colorPass);
     const speedLinesPass = new ShaderPass(SpeedLinesShader); composer.addPass(speedLinesPass);
     composer.addPass(new OutputPass());
@@ -654,7 +657,7 @@ export default function CarListen() {
       stars, starMat, clouds, ptcls, pGeo, pVel, pMat, shooters, birds,
       speedoNeedle: needleGrp,
       // Visual upgrade refs
-      skyMat, bloomPass, grainPass, chromaPass, colorPass, speedLinesPass, vignettePass,
+      skyMat, bloomPass, chromaPass, colorPass, speedLinesPass, vignettePass,
       hlConeL, hlConeR, speedLines, slGeo, slMat
     };
     return renderer;
@@ -676,7 +679,6 @@ export default function CarListen() {
       const k = keysRef.current, car = carRef.current, now = Date.now();
 
       // Update grain time every frame
-      if (s.grainPass) s.grainPass.uniforms.time.value = now * 0.001;
 
       if (!aliveRef.current) {
         if (s.explosion && s.explosion.visible) s.explosion.children.forEach(ch => { ch.position.y += (ch.userData.speed || 2) * dt; ch.scale.multiplyScalar(1 + dt * 0.5); if (ch.material.opacity > 0.01) ch.material.opacity -= dt * 0.4; });
@@ -773,7 +775,7 @@ export default function CarListen() {
       const sf = Math.min(car.speed / 120, 1);
       // Speed lines: fade in above 60mph
       if (s.speedLinesPass) {
-        s.speedLinesPass.uniforms.intensity.value = Math.max(0, (sf - 0.5) * 2) * 0.8;
+        s.speedLinesPass.uniforms.intensity.value = Math.max(0, (sf - 0.6) * 2.5) * 0.5;
         s.speedLinesPass.uniforms.time.value = now * 0.001;
       }
       // Speed line geometry
