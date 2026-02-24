@@ -1065,76 +1065,139 @@ export default function CarListen() {
   return (
     <div style={{ width: "100vw", height: "100vh", background: "#000", position: "relative", overflow: "hidden" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
-        @keyframes lobbyGlow { 0%,100%{text-shadow:0 0 20px rgba(74,222,128,0.3),0 0 60px rgba(74,222,128,0.1)} 50%{text-shadow:0 0 40px rgba(74,222,128,0.6),0 0 100px rgba(74,222,128,0.2)} }
-        @keyframes lobbyPulse { 0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(74,222,128,0.4)} 50%{transform:scale(1.03);box-shadow:0 0 30px 4px rgba(74,222,128,0.15)} }
-        @keyframes fadeSlideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes floatVinyl { 0%,100%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
-        @keyframes gradientShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
-        @keyframes scoreFlash { 0%{transform:scale(1)} 50%{transform:scale(1.15)} 100%{transform:scale(1)} }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        * { font-family: 'Inter', system-ui, -apple-system, sans-serif; box-sizing: border-box; }
+        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+        @keyframes fadeSlideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeSlideDown { from{opacity:0;transform:translateY(-16px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes scaleIn { from{opacity:0;transform:scale(0.92)} to{opacity:1;transform:scale(1)} }
+        @keyframes titleReveal { from{opacity:0;transform:translateY(32px) scale(0.95);filter:blur(8px)} to{opacity:1;transform:translateY(0) scale(1);filter:blur(0px)} }
+        @keyframes gradientFlow { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+        @keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+        @keyframes breathe { 0%,100%{opacity:0.5;transform:scale(1)} 50%{opacity:0.8;transform:scale(1.04)} }
+        @keyframes vinylSpin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @keyframes float { 0%,100%{transform:translateY(0px)} 50%{transform:translateY(-6px)} }
+        @keyframes orbFloat1 { 0%{transform:translate(0,0) scale(1)} 33%{transform:translate(40px,-30px) scale(1.1)} 66%{transform:translate(-20px,20px) scale(0.95)} 100%{transform:translate(0,0) scale(1)} }
+        @keyframes orbFloat2 { 0%{transform:translate(0,0) scale(1)} 33%{transform:translate(-35px,25px) scale(0.9)} 66%{transform:translate(25px,-15px) scale(1.05)} 100%{transform:translate(0,0) scale(1)} }
+        @keyframes orbFloat3 { 0%{transform:translate(0,0) scale(1)} 33%{transform:translate(20px,35px) scale(1.08)} 66%{transform:translate(-30px,-20px) scale(0.92)} 100%{transform:translate(0,0) scale(1)} }
+        @keyframes pulseRing { 0%{transform:scale(1);opacity:0.6} 100%{transform:scale(1.8);opacity:0} }
         @keyframes glowPulse { 0%,100%{box-shadow:0 0 8px rgba(74,222,128,0.2)} 50%{box-shadow:0 0 20px rgba(74,222,128,0.4),0 0 40px rgba(74,222,128,0.1)} }
+        @keyframes scoreFlash { 0%{transform:scale(1)} 50%{transform:scale(1.15)} 100%{transform:scale(1)} }
         @keyframes hudSlideIn { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
-        * { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+        @keyframes deathZoom { from{opacity:0;transform:scale(1.3);filter:blur(12px)} to{opacity:1;transform:scale(1);filter:blur(0px)} }
+        @keyframes textGlitch { 0%,100%{transform:translate(0)} 20%{transform:translate(-2px,1px)} 40%{transform:translate(2px,-1px)} 60%{transform:translate(-1px,-1px)} 80%{transform:translate(1px,2px)} }
+        .lobby-track-slot:hover { border-color: rgba(74,222,128,0.3) !important; background: rgba(255,255,255,0.05) !important; transform: translateY(-2px); }
+        .lobby-start:hover { background: linear-gradient(135deg, rgba(74,222,128,0.25), rgba(96,165,250,0.25)) !important; border-color: rgba(74,222,128,0.5) !important; transform: scale(1.04); box-shadow: 0 8px 40px rgba(74,222,128,0.2), 0 0 80px rgba(74,222,128,0.08) !important; }
+        .lobby-start:active { transform: scale(0.98); }
+        .hud-btn:hover { background: rgba(255,255,255,0.15) !important; }
+        .death-btn:hover { background: rgba(255,255,255,0.15) !important; transform: scale(1.06); box-shadow: 0 8px 40px rgba(0,0,0,0.5) !important; }
+        .death-btn:active { transform: scale(0.97); }
       `}</style>
       <div ref={mountRef} style={{ width: "100%", height: "100%" }} />
 
       {/* ===== LOBBY SCREEN ===== */}
-      {inLobby && <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "radial-gradient(ellipse at 50% 40%, rgba(10,20,30,0.85) 0%, rgba(0,0,0,0.95) 100%)", backdropFilter: "blur(6px)", zIndex: 10 }}>
-        {/* Animated background gradient bar */}
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "linear-gradient(90deg, #4ade80, #60a5fa, #a78bfa, #f472b6, #4ade80)", backgroundSize: "200% 100%", animation: "gradientShift 4s ease infinite" }} />
+      {inLobby && <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "radial-gradient(ellipse at 50% 30%, rgba(8,16,28,0.88) 0%, rgba(0,0,0,0.96) 100%)", backdropFilter: "blur(8px)", zIndex: 10, overflow: "hidden" }}>
 
-        {/* Title */}
-        <div style={{ animation: "fadeSlideUp 0.8s ease both", textAlign: "center", marginBottom: 8 }}>
-          <div style={{ fontSize: 14, letterSpacing: 6, color: "rgba(255,255,255,0.3)", fontWeight: 500, marginBottom: 8 }}>WELCOME TO</div>
-          <div style={{ fontSize: "clamp(36px, 7vw, 64px)", fontWeight: 900, letterSpacing: 3, color: "#fff", animation: "lobbyGlow 3s ease-in-out infinite", lineHeight: 1.1 }}>AERA CAR TESTER</div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 8, letterSpacing: 2 }}>SPATIAL AUDIO DRIVING EXPERIENCE</div>
-        </div>
+        {/* Floating gradient orbs — ambient depth */}
+        <div style={{ position: "absolute", width: 320, height: 320, borderRadius: "50%", background: "radial-gradient(circle, rgba(74,222,128,0.08) 0%, transparent 70%)", top: "10%", left: "15%", animation: "orbFloat1 12s ease-in-out infinite", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", width: 280, height: 280, borderRadius: "50%", background: "radial-gradient(circle, rgba(96,165,250,0.06) 0%, transparent 70%)", bottom: "15%", right: "10%", animation: "orbFloat2 15s ease-in-out infinite", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", background: "radial-gradient(circle, rgba(167,139,250,0.05) 0%, transparent 70%)", top: "55%", left: "60%", animation: "orbFloat3 18s ease-in-out infinite", pointerEvents: "none" }} />
 
-        {/* Description cards */}
-        <div style={{ display: "flex", gap: 16, marginTop: 28, flexWrap: "wrap", justifyContent: "center", maxWidth: 600, padding: "0 16px" }}>
-          {[
-            { icon: "💿", text: "Collect records, avoid Labels", color: "#ffdd00", delay: "0.3s" },
-            { icon: "📝", text: "Avoid getting Signed", color: "#ff6b6b", delay: "0.5s" },
-            { icon: "🔊", text: "Test your track with spatial audio", color: "#4ade80", delay: "0.7s" },
-          ].map(({ icon, text, color, delay }) => (
-            <div key={text} style={{ animation: `fadeSlideUp 0.7s ease ${delay} both`, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "12px 18px", display: "flex", alignItems: "center", gap: 10, minWidth: 170 }}>
-              <span style={{ fontSize: 22 }}>{icon}</span>
-              <span style={{ fontSize: 13, color, fontWeight: 600 }}>{text}</span>
-            </div>
-          ))}
-        </div>
+        {/* Top gradient accent line */}
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg, transparent, #4ade80, #60a5fa, #a78bfa, #f472b6, transparent)", backgroundSize: "200% 100%", animation: "gradientFlow 6s linear infinite" }} />
 
-        {/* Track upload area */}
-        <div style={{ animation: "fadeSlideUp 0.7s ease 0.9s both", marginTop: 36, textAlign: "center" }}>
-          <div style={{ fontSize: 11, letterSpacing: 3, color: "rgba(255,255,255,0.3)", marginBottom: 12 }}>LOAD YOUR TRACKS (UP TO 3)</div>
-          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            {[0, 1, 2].map(i => {
-              const t = tracks[i];
-              return (
-                <div key={i} style={{ width: 160, height: 80, borderRadius: 14, border: t ? "1px solid rgba(74,222,128,0.3)" : "2px dashed rgba(255,255,255,0.12)", background: t ? "rgba(74,222,128,0.06)" : "rgba(255,255,255,0.02)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative", transition: "all 0.3s" }}>
-                  {t ? (<>
-                    <div style={{ fontSize: 11, color: "#4ade80", fontWeight: 700, maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>{t.name}</div>
-                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>Track {i + 1}</div>
-                    <button onClick={() => removeTrack(i)} style={{ position: "absolute", top: 4, right: 6, background: "none", border: "none", color: "rgba(255,255,255,0.3)", fontSize: 14, cursor: "pointer", padding: 0, lineHeight: 1 }}>x</button>
-                  </>) : (
-                    <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, width: "100%", height: "100%", justifyContent: "center" }}>
-                      <div style={{ fontSize: 22, opacity: 0.3 }}>+</div>
-                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)" }}>Add Track</div>
-                      <input type="file" accept="audio/*" onChange={e => { if (e.target.files[0]) addTrack(e.target.files[0]); e.target.value = ""; }} style={{ display: "none" }} />
-                    </label>
-                  )}
-                </div>
-              );
-            })}
+        {/* Vinyl record decoration — spins slowly */}
+        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 500, height: 500, opacity: 0.03, animation: "vinylSpin 30s linear infinite", pointerEvents: "none" }}>
+          <div style={{ width: "100%", height: "100%", borderRadius: "50%", border: "2px solid #fff", position: "relative" }}>
+            {[0.3, 0.45, 0.6, 0.75, 0.88].map((r, i) => <div key={i} style={{ position: "absolute", top: `${(1-r)*50}%`, left: `${(1-r)*50}%`, width: `${r*100}%`, height: `${r*100}%`, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.5)" }} />)}
+            <div style={{ position: "absolute", top: "42%", left: "42%", width: "16%", height: "16%", borderRadius: "50%", background: "rgba(255,255,255,0.3)" }} />
           </div>
         </div>
 
-        {/* START button */}
-        <button onClick={startGame} style={{ animation: "fadeSlideUp 0.7s ease 1.1s both, lobbyPulse 2.5s ease-in-out 2s infinite", marginTop: 36, background: "linear-gradient(135deg, rgba(74,222,128,0.15), rgba(96,165,250,0.15))", border: "1px solid rgba(74,222,128,0.3)", borderRadius: 16, padding: "16px 56px", color: "#4ade80", fontSize: 20, fontWeight: 800, cursor: "pointer", letterSpacing: 4 }}
-          onMouseEnter={e => { e.target.style.background = "linear-gradient(135deg, rgba(74,222,128,0.3), rgba(96,165,250,0.3))"; e.target.style.borderColor = "rgba(74,222,128,0.6)"; }}
-          onMouseLeave={e => { e.target.style.background = "linear-gradient(135deg, rgba(74,222,128,0.15), rgba(96,165,250,0.15))"; e.target.style.borderColor = "rgba(74,222,128,0.3)"; }}
-        >START</button>
-        <div style={{ animation: "fadeSlideUp 0.7s ease 1.3s both", fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 12 }}>Tracks are optional — you can drive without music</div>
+        {/* ---- CONTENT ---- */}
+        <div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center", maxWidth: 640, padding: "0 24px", width: "100%" }}>
+
+          {/* Title block */}
+          <div style={{ animation: "titleReveal 1s cubic-bezier(0.16,1,0.3,1) both", textAlign: "center", marginBottom: 6 }}>
+            <div style={{ fontSize: 11, letterSpacing: 8, color: "rgba(255,255,255,0.25)", fontWeight: 600, marginBottom: 12, textTransform: "uppercase" }}>Welcome to</div>
+            <div style={{ fontSize: "clamp(40px, 8vw, 72px)", fontWeight: 900, letterSpacing: -1, lineHeight: 1, background: "linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.7) 50%, #4ade80 100%)", backgroundSize: "200% 200%", animation: "gradientFlow 8s ease infinite", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>AERA</div>
+            <div style={{ fontSize: "clamp(14px, 3vw, 22px)", fontWeight: 300, letterSpacing: 10, color: "rgba(255,255,255,0.45)", marginTop: 4, textTransform: "uppercase" }}>Car Tester</div>
+          </div>
+
+          {/* Subtitle with separator */}
+          <div style={{ animation: "fadeSlideUp 0.8s cubic-bezier(0.16,1,0.3,1) 0.15s both", display: "flex", alignItems: "center", gap: 16, marginTop: 12, marginBottom: 32 }}>
+            <div style={{ width: 40, height: 1, background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.2))" }} />
+            <div style={{ fontSize: 10, letterSpacing: 4, color: "rgba(255,255,255,0.3)", fontWeight: 500 }}>SPATIAL AUDIO DRIVING EXPERIENCE</div>
+            <div style={{ width: 40, height: 1, background: "linear-gradient(90deg, rgba(255,255,255,0.2), transparent)" }} />
+          </div>
+
+          {/* Feature pills — horizontal row */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", marginBottom: 36 }}>
+            {[
+              { icon: "💿", text: "Collect Records", color: "#ffdd00", delay: "0.25s" },
+              { icon: "🚫", text: "Dodge Labels", color: "#ff6b6b", delay: "0.35s" },
+              { icon: "🔊", text: "Test Your Mix", color: "#4ade80", delay: "0.45s" },
+            ].map(({ icon, text, color, delay }) => (
+              <div key={text} style={{ animation: `scaleIn 0.6s cubic-bezier(0.16,1,0.3,1) ${delay} both`, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 100, padding: "8px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 15 }}>{icon}</span>
+                <span style={{ fontSize: 11, color, fontWeight: 600, letterSpacing: 0.5 }}>{text}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Track upload — glass card */}
+          <div style={{ animation: "fadeSlideUp 0.8s cubic-bezier(0.16,1,0.3,1) 0.5s both", width: "100%", maxWidth: 520, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 20, padding: "20px 24px", backdropFilter: "blur(12px)" }}>
+            <div style={{ fontSize: 10, letterSpacing: 4, color: "rgba(255,255,255,0.25)", fontWeight: 600, marginBottom: 14, textAlign: "center" }}>LOAD YOUR TRACKS</div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+              {[0, 1, 2].map(i => {
+                const t = tracks[i];
+                return (
+                  <div key={i} className="lobby-track-slot" style={{ flex: 1, maxWidth: 160, height: 76, borderRadius: 14, border: t ? "1px solid rgba(74,222,128,0.25)" : "1px dashed rgba(255,255,255,0.1)", background: t ? "rgba(74,222,128,0.05)" : "rgba(255,255,255,0.015)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative", transition: "all 0.3s cubic-bezier(0.16,1,0.3,1)", cursor: t ? "default" : "pointer" }}>
+                    {t ? (<>
+                      {/* Spinning mini vinyl */}
+                      <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid rgba(74,222,128,0.3)", display: "flex", alignItems: "center", justifyContent: "center", animation: "vinylSpin 3s linear infinite", marginBottom: 4 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80" }} />
+                      </div>
+                      <div style={{ fontSize: 10, color: "#4ade80", fontWeight: 700, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>{t.name}</div>
+                      <button onClick={() => removeTrack(i)} style={{ position: "absolute", top: 5, right: 7, background: "rgba(255,255,255,0.05)", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 11, cursor: "pointer", padding: "1px 5px", lineHeight: 1, borderRadius: 6, transition: "all 0.2s" }} onMouseEnter={e => e.target.style.color = "#ff6b6b"} onMouseLeave={e => e.target.style.color = "rgba(255,255,255,0.35)"}>x</button>
+                    </>) : (
+                      <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, width: "100%", height: "100%", justifyContent: "center" }}>
+                        <div style={{ width: 28, height: 28, borderRadius: "50%", border: "1.5px dashed rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: "rgba(255,255,255,0.2)", transition: "all 0.2s" }}>+</div>
+                        <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", fontWeight: 500, letterSpacing: 0.5 }}>Add Track</div>
+                        <input type="file" accept="audio/*" onChange={e => { if (e.target.files[0]) addTrack(e.target.files[0]); e.target.value = ""; }} style={{ display: "none" }} />
+                      </label>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ textAlign: "center", fontSize: 9, color: "rgba(255,255,255,0.15)", marginTop: 10, fontWeight: 400 }}>Tracks are optional — you can drive without music</div>
+          </div>
+
+          {/* START button */}
+          <button className="lobby-start" onClick={startGame} style={{ animation: "fadeSlideUp 0.8s cubic-bezier(0.16,1,0.3,1) 0.7s both", marginTop: 28, position: "relative", overflow: "hidden", background: "linear-gradient(135deg, rgba(74,222,128,0.12), rgba(96,165,250,0.12))", border: "1px solid rgba(74,222,128,0.2)", borderRadius: 16, padding: "18px 72px", color: "#4ade80", fontSize: 18, fontWeight: 800, cursor: "pointer", letterSpacing: 6, transition: "all 0.35s cubic-bezier(0.16,1,0.3,1)", boxShadow: "0 4px 30px rgba(74,222,128,0.08)" }}>
+            {/* Shimmer sweep */}
+            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.06) 50%, transparent 60%)", animation: "shimmer 3s ease-in-out infinite", pointerEvents: "none" }} />
+            <span style={{ position: "relative" }}>START</span>
+          </button>
+
+          {/* Controls hint */}
+          <div style={{ animation: "fadeIn 1s ease 1.2s both", display: "flex", gap: 20, marginTop: 20 }}>
+            {[
+              { key: "SHIFT", label: "accelerate", c: "#4ade80" },
+              { key: "SPACE", label: "brake", c: "#fbbf24" },
+              { key: "A / D", label: "steer", c: "#60a5fa" },
+            ].map(({ key, label, c }) => (
+              <div key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: c, background: `${c}15`, padding: "3px 7px", borderRadius: 5, letterSpacing: 0.5 }}>{key}</span>
+                <span style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", fontWeight: 500 }}>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Bottom gradient accent */}
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg, transparent, rgba(96,165,250,0.3), rgba(167,139,250,0.3), transparent)" }} />
       </div>}
 
       {/* ===== IN-GAME HUD ===== */}
@@ -1154,44 +1217,71 @@ export default function CarListen() {
           </div>}
         </div>
 
-        {/* Death screen with enhanced visuals */}
-        {!alive && <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "radial-gradient(ellipse at 50% 45%, rgba(40,0,0,0.7), rgba(0,0,0,0.8))", backdropFilter: "blur(6px)", animation: "fadeSlideUp 0.4s ease both" }}>
-          <div style={{ fontSize: "clamp(48px, 8vw, 72px)", fontWeight: 900, color: "#ff3333", textShadow: "0 0 40px rgba(255,0,0,0.6), 0 0 80px rgba(255,0,0,0.2)", letterSpacing: 6 }}>SIGNED</div>
-          <div style={{ fontSize: 15, color: "rgba(255,255,255,0.5)", marginTop: 8, fontWeight: 500, letterSpacing: 1 }}>The label got you...</div>
-          <div style={{ fontSize: 22, color: "#fff", marginTop: 16, fontWeight: 600 }}>Score: <span style={{ color: "#ffdd00", fontWeight: 800, textShadow: "0 0 15px rgba(255,221,0,0.4)" }}>{score}</span></div>
-          {score >= highScore && score > 0 && <div style={{ fontSize: 16, color: "#ff8800", marginTop: 8, fontWeight: 700, textShadow: "0 0 20px rgba(255,136,0,0.4)", animation: "glowPulse 1.5s ease infinite" }}>NEW HIGH SCORE!</div>}
-          <button onClick={restart} style={{ marginTop: 28, background: "rgba(255,255,255,0.08)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 14, padding: "14px 40px", color: "#fff", fontSize: 17, fontWeight: 700, cursor: "pointer", letterSpacing: 3, transition: "all 0.25s ease", boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }} onMouseEnter={e => { e.target.style.background = "rgba(255,255,255,0.18)"; e.target.style.transform = "scale(1.05)"; e.target.style.boxShadow = "0 6px 30px rgba(0,0,0,0.4)"; }} onMouseLeave={e => { e.target.style.background = "rgba(255,255,255,0.08)"; e.target.style.transform = "scale(1)"; e.target.style.boxShadow = "0 4px 20px rgba(0,0,0,0.3)"; }}>RESTART</button>
+        {/* Death screen */}
+        {!alive && <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "radial-gradient(ellipse at 50% 40%, rgba(60,0,0,0.75), rgba(0,0,0,0.88))", backdropFilter: "blur(10px)", animation: "fadeIn 0.3s ease both", overflow: "hidden" }}>
+          {/* Red pulse ring */}
+          <div style={{ position: "absolute", top: "50%", left: "50%", width: 200, height: 200, borderRadius: "50%", border: "2px solid rgba(255,50,50,0.3)", transform: "translate(-50%,-50%)", animation: "pulseRing 2s ease-out infinite", pointerEvents: "none" }} />
+
+          <div style={{ animation: "deathZoom 0.5s cubic-bezier(0.16,1,0.3,1) both", textAlign: "center", position: "relative", zIndex: 2 }}>
+            <div style={{ fontSize: "clamp(56px, 10vw, 84px)", fontWeight: 900, letterSpacing: -2, lineHeight: 1, background: "linear-gradient(180deg, #ff4444, #cc0000)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", filter: "drop-shadow(0 0 40px rgba(255,0,0,0.5))", animation: "textGlitch 0.5s ease 0.3s both" }}>SIGNED</div>
+            <div style={{ fontSize: 14, color: "rgba(255,255,255,0.4)", marginTop: 8, fontWeight: 400, letterSpacing: 2 }}>The label got you...</div>
+          </div>
+
+          {/* Score card */}
+          <div style={{ animation: "fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.2s both", marginTop: 28, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: "16px 36px", textAlign: "center", backdropFilter: "blur(12px)" }}>
+            <div style={{ fontSize: 10, letterSpacing: 3, color: "rgba(255,255,255,0.3)", fontWeight: 600, marginBottom: 6 }}>FINAL SCORE</div>
+            <div style={{ fontSize: 40, fontWeight: 900, color: "#ffdd00", textShadow: "0 0 25px rgba(255,221,0,0.3)", letterSpacing: -1, lineHeight: 1 }}>{score}</div>
+            {score >= highScore && score > 0 && <div style={{ fontSize: 11, color: "#ff8800", marginTop: 8, fontWeight: 700, letterSpacing: 2, textShadow: "0 0 15px rgba(255,136,0,0.3)" }}>NEW HIGH SCORE</div>}
+          </div>
+
+          <button className="death-btn" onClick={restart} style={{ animation: "fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.4s both", marginTop: 24, background: "rgba(255,255,255,0.06)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, padding: "14px 48px", color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", letterSpacing: 4, transition: "all 0.3s cubic-bezier(0.16,1,0.3,1)", boxShadow: "0 4px 24px rgba(0,0,0,0.3)" }}>RESTART</button>
         </div>}
 
-        {/* Bottom-left: playlist controls with frosted glass */}
-        {tracks.length > 0 && <div style={{ position: "absolute", bottom: 16, left: 16, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(20px) saturate(1.4)", borderRadius: 14, padding: "10px 16px", color: "#fff", display: "flex", alignItems: "center", gap: 10, maxWidth: 300, border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 4px 30px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)", animation: "hudSlideIn 0.5s ease 0.2s both" }}>
-          {tracks.length > 1 && <button onClick={prevTrack} style={{ background: "none", border: "none", color: "#fff", fontSize: 14, cursor: "pointer", padding: "2px 4px", opacity: 0.5, transition: "opacity 0.2s" }} onMouseEnter={e => e.target.style.opacity = 1} onMouseLeave={e => e.target.style.opacity = 0.5}>⏮</button>}
-          <button onClick={togglePlay} style={{ background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", fontSize: 16, cursor: "pointer", padding: "4px 8px", borderRadius: 8, transition: "background 0.2s" }} onMouseEnter={e => e.target.style.background = "rgba(255,255,255,0.18)"} onMouseLeave={e => e.target.style.background = "rgba(255,255,255,0.08)"}>{isPlaying ? "⏸" : "▶"}</button>
-          {tracks.length > 1 && <button onClick={nextTrack} style={{ background: "none", border: "none", color: "#fff", fontSize: 14, cursor: "pointer", padding: "2px 4px", opacity: 0.5, transition: "opacity 0.2s" }} onMouseEnter={e => e.target.style.opacity = 1} onMouseLeave={e => e.target.style.opacity = 0.5}>⏭</button>}
-          <div style={{ flex: 1, minWidth: 0, marginLeft: 4 }}>
+        {/* Bottom-left: playlist controls */}
+        {tracks.length > 0 && <div style={{ position: "absolute", bottom: 16, left: 16, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(24px) saturate(1.5)", borderRadius: 16, padding: "10px 16px", color: "#fff", display: "flex", alignItems: "center", gap: 10, maxWidth: 320, border: "1px solid rgba(255,255,255,0.06)", boxShadow: "0 4px 30px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04)", animation: "hudSlideIn 0.5s ease 0.2s both" }}>
+          {/* Mini spinning vinyl */}
+          <div style={{ width: 32, height: 32, borderRadius: "50%", border: "2px solid rgba(74,222,128,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, animation: isPlaying ? "vinylSpin 2s linear infinite" : "none", transition: "border-color 0.3s" }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: isPlaying ? "#4ade80" : "rgba(255,255,255,0.2)", transition: "background 0.3s" }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 700, letterSpacing: 0.3 }}>{curName}</div>
-            <div style={{ fontSize: 9, opacity: 0.3, fontWeight: 500 }}>Track {trackIdx + 1} of {tracks.length}</div>
+            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", fontWeight: 500, marginTop: 1 }}>Track {trackIdx + 1} / {tracks.length}</div>
+          </div>
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            {tracks.length > 1 && <button className="hud-btn" onClick={prevTrack} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 12, cursor: "pointer", padding: "4px 6px", borderRadius: 6, transition: "all 0.2s" }}>⏮</button>}
+            <button className="hud-btn" onClick={togglePlay} style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#fff", fontSize: 14, cursor: "pointer", padding: "5px 10px", borderRadius: 8, transition: "all 0.2s" }}>{isPlaying ? "⏸" : "▶"}</button>
+            {tracks.length > 1 && <button className="hud-btn" onClick={nextTrack} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 12, cursor: "pointer", padding: "4px 6px", borderRadius: 6, transition: "all 0.2s" }}>⏭</button>}
           </div>
         </div>}
 
-        {/* Top-right: speed + settings with enhanced glassmorphism */}
+        {/* Top-right: speed + theme selectors */}
         <div style={{ position: "absolute", top: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end", animation: "hudSlideIn 0.5s ease 0.1s both" }}>
-          <div style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(20px) saturate(1.4)", borderRadius: 16, padding: "12px 20px", color: "#fff", textAlign: "center", border: "1px solid rgba(255,255,255,0.08)", minWidth: 95, boxShadow: "0 4px 30px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)" }}>
-            <div style={{ fontSize: 36, fontWeight: 800, fontFamily: "'Inter', monospace", color: currentSpeed > 80 ? "#ff6b6b" : "#4ade80", textShadow: currentSpeed > 80 ? "0 0 20px rgba(255,107,107,0.4)" : "0 0 15px rgba(74,222,128,0.3)", transition: "color 0.3s ease, text-shadow 0.3s ease", letterSpacing: -1, lineHeight: 1 }}>{currentSpeed}</div>
-            <div style={{ fontSize: 9, opacity: 0.35, letterSpacing: 3, fontWeight: 600, marginTop: 2 }}>MPH</div>
+          {/* Speed gauge */}
+          <div style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(24px) saturate(1.5)", borderRadius: 18, padding: "14px 22px", color: "#fff", textAlign: "center", border: "1px solid rgba(255,255,255,0.06)", minWidth: 100, boxShadow: "0 4px 30px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04)", position: "relative", overflow: "hidden" }}>
+            {/* Speed bar indicator at top */}
+            <div style={{ position: "absolute", top: 0, left: 0, height: 2, background: currentSpeed > 80 ? "linear-gradient(90deg, #ff6b6b, #ff3333)" : "linear-gradient(90deg, #4ade80, #22c55e)", width: `${Math.min(currentSpeed / 120 * 100, 100)}%`, transition: "width 0.3s ease, background 0.3s ease", borderRadius: "0 1px 1px 0" }} />
+            <div style={{ fontSize: 38, fontWeight: 900, fontFamily: "'Inter', monospace", color: currentSpeed > 80 ? "#ff6b6b" : "#4ade80", textShadow: currentSpeed > 80 ? "0 0 25px rgba(255,107,107,0.35)" : "0 0 20px rgba(74,222,128,0.25)", transition: "color 0.3s ease, text-shadow 0.3s ease", letterSpacing: -2, lineHeight: 1 }}>{currentSpeed}</div>
+            <div style={{ fontSize: 8, opacity: 0.3, letterSpacing: 4, fontWeight: 700, marginTop: 3 }}>MPH</div>
           </div>
-          <div style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(20px) saturate(1.4)", borderRadius: 12, padding: "5px 6px", color: "#fff", display: "flex", gap: 2, border: "1px solid rgba(255,255,255,0.06)", boxShadow: "0 2px 15px rgba(0,0,0,0.2)" }}>
-            {[{ k: "day", i: "☀️" }, { k: "sunset", i: "🌅" }, { k: "night", i: "🌙" }, { k: "retro", i: "🌆" }].map(({ k, i }) => (<button key={k} onClick={() => setTimeOfDay(k)} style={{ background: timeOfDay === k ? "rgba(255,255,255,0.15)" : "transparent", border: "none", borderRadius: 8, padding: "5px 10px", color: "#fff", fontSize: 15, cursor: "pointer", transition: "all 0.2s ease" }} onMouseEnter={e => { if (timeOfDay !== k) e.target.style.background = "rgba(255,255,255,0.08)"; }} onMouseLeave={e => { if (timeOfDay !== k) e.target.style.background = "transparent"; }}>{i}</button>))}
+          {/* Theme selectors — unified row */}
+          <div style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(24px) saturate(1.5)", borderRadius: 12, padding: "4px 5px", display: "flex", gap: 1, border: "1px solid rgba(255,255,255,0.05)" }}>
+            {[{ k: "day", i: "☀️" }, { k: "sunset", i: "🌅" }, { k: "night", i: "🌙" }, { k: "retro", i: "🌆" }].map(({ k, i }) => (
+              <button key={k} className="hud-btn" onClick={() => setTimeOfDay(k)} style={{ background: timeOfDay === k ? "rgba(255,255,255,0.12)" : "transparent", border: "none", borderRadius: 8, padding: "5px 9px", color: "#fff", fontSize: 14, cursor: "pointer", transition: "all 0.2s ease" }}>{i}</button>
+            ))}
           </div>
-          <div style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(20px) saturate(1.4)", borderRadius: 12, padding: "5px 6px", color: "#fff", display: "flex", gap: 2, border: "1px solid rgba(255,255,255,0.06)", boxShadow: "0 2px 15px rgba(0,0,0,0.2)" }}>
-            {[{ k: "forest", i: "🌲", l: "Forest" }, { k: "sakura", i: "🌸", l: "Sakura" }, { k: "city", i: "🏙️", l: "City" }].map(({ k, i, l }) => (<button key={k} onClick={() => setSceneryTheme(k)} style={{ background: sceneryTheme === k ? "rgba(255,255,255,0.15)" : "transparent", border: "none", borderRadius: 8, padding: "5px 10px", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontWeight: 600, transition: "all 0.2s ease" }} onMouseEnter={e => { if (sceneryTheme !== k) e.target.style.background = "rgba(255,255,255,0.08)"; }} onMouseLeave={e => { if (sceneryTheme !== k) e.target.style.background = "transparent"; }}><span style={{ fontSize: 15 }}>{i}</span>{l}</button>))}
+          <div style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(24px) saturate(1.5)", borderRadius: 12, padding: "4px 5px", display: "flex", gap: 1, border: "1px solid rgba(255,255,255,0.05)" }}>
+            {[{ k: "forest", i: "🌲", l: "Forest" }, { k: "sakura", i: "🌸", l: "Sakura" }, { k: "city", i: "🏙️", l: "City" }].map(({ k, i, l }) => (
+              <button key={k} className="hud-btn" onClick={() => setSceneryTheme(k)} style={{ background: sceneryTheme === k ? "rgba(255,255,255,0.12)" : "transparent", border: "none", borderRadius: 8, padding: "5px 10px", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontWeight: 600, transition: "all 0.2s ease" }}><span style={{ fontSize: 14 }}>{i}</span>{l}</button>
+            ))}
           </div>
         </div>
 
-        {/* Bottom-right: controls help with polished style */}
-        <div style={{ position: "absolute", bottom: 16, right: 16, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(16px) saturate(1.3)", borderRadius: 12, padding: "8px 14px", color: "#fff", border: "1px solid rgba(255,255,255,0.06)", boxShadow: "0 2px 15px rgba(0,0,0,0.2)", animation: "hudSlideIn 0.5s ease 0.3s both" }}>
-          <div style={{ fontSize: 11, opacity: 0.5, lineHeight: 1.6, fontWeight: 500, letterSpacing: 0.3 }}>
-            <span style={{ color: "#4ade80", fontWeight: 700 }}>SHIFT</span> go · <span style={{ color: "#fbbf24", fontWeight: 700 }}>SPACE</span> brake · <span style={{ color: "#60a5fa", fontWeight: 700 }}>A/D</span> steer
+        {/* Bottom-right: controls hint */}
+        <div style={{ position: "absolute", bottom: 16, right: 16, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(20px) saturate(1.3)", borderRadius: 12, padding: "7px 14px", border: "1px solid rgba(255,255,255,0.04)", animation: "hudSlideIn 0.5s ease 0.3s both" }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            {[{ k: "SHIFT", c: "#4ade80" }, { k: "SPACE", c: "#fbbf24" }, { k: "A/D", c: "#60a5fa" }].map(({ k, c }) => (
+              <span key={k} style={{ fontSize: 9, fontWeight: 700, color: c, opacity: 0.5, letterSpacing: 0.5 }}>{k}</span>
+            ))}
           </div>
         </div>
       </>}
