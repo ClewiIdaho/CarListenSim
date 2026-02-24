@@ -13,6 +13,7 @@ export default function CarListen() {
   const [alive, setAlive] = useState(true);
   const [flash, setFlash] = useState(null);
   const audioRef = useRef(null);
+  const audioCtxRef = useRef(null);
   const animRef = useRef(null);
   const sceneRef = useRef({});
   const clockRef = useRef(new THREE.Clock());
@@ -22,8 +23,111 @@ export default function CarListen() {
   const aliveRef = useRef(true);
   const hiRef = useRef(0);
 
-  const handleFile = e => { const f = e.target.files[0]; if (!f) return; if (audioRef.current) audioRef.current.pause(); audioRef.current = new Audio(URL.createObjectURL(f)); setAudioName(f.name.replace(/\.[^/.]+$/, "")); setIsPlaying(false); };
-  const togglePlay = () => { if (!audioRef.current) return; if (isPlaying) audioRef.current.pause(); else audioRef.current.play(); setIsPlaying(!isPlaying); };
+  // --- Spatial Audio: simulate car cabin speakers ---
+  const initAudioCtx = () => {
+    if (audioCtxRef.current) return audioCtxRef.current;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Create cabin reverb via convolver with synthetic impulse
+    const rate = ctx.sampleRate;
+    const len = Math.floor(rate * 0.35); // short reverb for small car cabin
+    const impulse = ctx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = impulse.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        // Exponential decay with some early reflections
+        const t = i / rate;
+        const decay = Math.exp(-t * 12);
+        const early = i < rate * 0.02 ? 0.6 : 1;
+        d[i] = (Math.random() * 2 - 1) * decay * early * 0.4;
+      }
+    }
+    const convolver = ctx.createConvolver();
+    convolver.buffer = impulse;
+    // Low-pass to simulate muffled car interior
+    const cabinLPF = ctx.createBiquadFilter();
+    cabinLPF.type = "lowpass";
+    cabinLPF.frequency.value = 8000;
+    cabinLPF.Q.value = 0.7;
+    // Slight bass boost like car subwoofer
+    const bassBoost = ctx.createBiquadFilter();
+    bassBoost.type = "peaking";
+    bassBoost.frequency.value = 80;
+    bassBoost.gain.value = 6;
+    bassBoost.Q.value = 1.2;
+    // Stereo panner nodes for L/R speaker simulation
+    const panL = ctx.createStereoPanner();
+    panL.pan.value = -0.6;
+    const panR = ctx.createStereoPanner();
+    panR.pan.value = 0.6;
+    // Gains
+    const dryGain = ctx.createGain();
+    dryGain.gain.value = 0.7;
+    const wetGain = ctx.createGain();
+    wetGain.gain.value = 0.35;
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = 1.0;
+    // Road noise generator
+    const noiseNode = ctx.createBufferSource();
+    const noiseLen = Math.floor(rate * 2);
+    const noiseBuf = ctx.createBuffer(1, noiseLen, rate);
+    const noiseData = noiseBuf.getChannelData(0);
+    for (let i = 0; i < noiseLen; i++) noiseData[i] = (Math.random() * 2 - 1);
+    noiseNode.buffer = noiseBuf;
+    noiseNode.loop = true;
+    const noiseLPF = ctx.createBiquadFilter();
+    noiseLPF.type = "lowpass";
+    noiseLPF.frequency.value = 200;
+    noiseLPF.Q.value = 0.5;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = 0;
+    noiseNode.connect(noiseLPF).connect(noiseGain).connect(ctx.destination);
+    noiseNode.start();
+
+    audioCtxRef.current = {
+      ctx, convolver, cabinLPF, bassBoost, panL, panR,
+      dryGain, wetGain, masterGain, noiseGain, sourceNode: null
+    };
+    return audioCtxRef.current;
+  };
+
+  const connectSource = (audioEl) => {
+    const ac = initAudioCtx();
+    // Disconnect old source
+    if (ac.sourceNode) { try { ac.sourceNode.disconnect(); } catch (e) { /* ok */ } }
+    const src = ac.ctx.createMediaElementSource(audioEl);
+    ac.sourceNode = src;
+    // Dry path: source -> bassBoost -> cabinLPF -> panL/panR -> dryGain
+    src.connect(ac.bassBoost);
+    ac.bassBoost.connect(ac.cabinLPF);
+    ac.cabinLPF.connect(ac.panL);
+    ac.cabinLPF.connect(ac.panR);
+    ac.panL.connect(ac.dryGain);
+    ac.panR.connect(ac.dryGain);
+    ac.dryGain.connect(ac.masterGain);
+    // Wet path: source -> convolver -> wetGain
+    src.connect(ac.convolver);
+    ac.convolver.connect(ac.wetGain);
+    ac.wetGain.connect(ac.masterGain);
+    // Master -> output
+    ac.masterGain.connect(ac.ctx.destination);
+  };
+
+  const handleFile = e => {
+    const f = e.target.files[0]; if (!f) return;
+    if (audioRef.current) audioRef.current.pause();
+    const audio = new Audio(URL.createObjectURL(f));
+    audio.crossOrigin = "anonymous";
+    audioRef.current = audio;
+    connectSource(audio);
+    setAudioName(f.name.replace(/\.[^/.]+$/, "")); setIsPlaying(false);
+  };
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    const ac = audioCtxRef.current;
+    if (ac && ac.ctx.state === "suspended") ac.ctx.resume();
+    if (isPlaying) audioRef.current.pause(); else audioRef.current.play();
+    setIsPlaying(!isPlaying);
+  };
   const restart = () => { const s = sceneRef.current; aliveRef.current = true; setAlive(true); scoreRef.current = 0; setScore(0); carRef.current = { speed: 0, steering: 0, posX: 0, angle: 0 }; if (s.records) s.records.forEach((r, i) => { r.visible = true; r.position.z = -40 - i * 35; r.position.x = (Math.random() - 0.5) * 10; }); if (s.labels) s.labels.forEach((m, i) => { m.visible = true; m.position.z = -60 - i * 50; m.position.x = (Math.random() - 0.5) * 10; }); if (s.explosion) s.explosion.visible = false; if (s.roadGroup) s.roadGroup.position.x = 0; };
 
   // Scenery factories
@@ -170,8 +274,7 @@ export default function CarListen() {
     const db = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.7, 2.2), mB); db.position.set(0, 1.5, -2.6); interior.add(db);
     const dt2 = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.12, 1.8), mS); dt2.position.set(0, 1.9, -2.5); interior.add(dt2);
     const df = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 5.6, 16, 1, true, 0, Math.PI), mB); df.rotation.z = Math.PI / 2; df.rotation.x = Math.PI / 2; df.position.set(0, 1.15, -3.1); interior.add(df);
-    const ch = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.3, 0.9), mD); ch.position.set(-0.9, 2.15, -2.3); ch.rotation.x = -0.2; interior.add(ch);
-    const cs = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.4), new THREE.MeshBasicMaterial({ color: 0x0a1520 })); cs.position.set(-0.9, 2.0, -2.25); cs.rotation.x = -0.3; interior.add(cs);
+    const ch = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.9, 0.15), mD); ch.position.set(-0.88, 2.18, -2.32); ch.rotation.x = -0.25; interior.add(ch);
 
     // Stereo
     const sGrp = new THREE.Group(); sGrp.position.set(0.5, 1.85, -2.35);
@@ -197,6 +300,64 @@ export default function CarListen() {
     wGrp.add(new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.005, 8, 24), mC));
     [-0.5, 0.5].forEach(sx => { const p = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.035, 0.1), mC); p.position.set(sx, 0.08, -0.06); wGrp.add(p); });
     wGrp.position.set(-0.85, 2.1, -1.8); wGrp.rotation.x = -0.38; interior.add(wGrp);
+
+    // === SPEEDOMETER GAUGE ===
+    const speedoGrp = new THREE.Group();
+    // Gauge backing (dark circle)
+    const gaugeBack = new THREE.Mesh(new THREE.CircleGeometry(0.38, 32), new THREE.MeshPhongMaterial({ color: 0x0a0a0a, shininess: 40 }));
+    speedoGrp.add(gaugeBack);
+    // Chrome ring
+    const gaugeRing = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.02, 12, 32), mC);
+    speedoGrp.add(gaugeRing);
+    // Tick marks and number labels
+    const speedoCanvas = document.createElement("canvas");
+    speedoCanvas.width = 256; speedoCanvas.height = 256;
+    const spCtx = speedoCanvas.getContext("2d");
+    spCtx.clearRect(0, 0, 256, 256);
+    const cx = 128, cy = 128, r = 105;
+    // Draw tick marks and labels for 0-120 MPH
+    for (let mph = 0; mph <= 120; mph += 10) {
+      const frac = mph / 120;
+      const ang = Math.PI * 0.75 + frac * Math.PI * 1.5; // 225 to 495 degrees
+      const cos = Math.cos(ang), sin = Math.sin(ang);
+      const isMajor = mph % 20 === 0;
+      const inner = isMajor ? r - 20 : r - 12;
+      spCtx.strokeStyle = isMajor ? "#ffffff" : "#888888";
+      spCtx.lineWidth = isMajor ? 2.5 : 1.2;
+      spCtx.beginPath();
+      spCtx.moveTo(cx + inner * cos, cy + inner * sin);
+      spCtx.lineTo(cx + r * cos, cy + r * sin);
+      spCtx.stroke();
+      if (isMajor) {
+        spCtx.fillStyle = "#ffffff";
+        spCtx.font = "bold 16px monospace";
+        spCtx.textAlign = "center";
+        spCtx.textBaseline = "middle";
+        spCtx.fillText(String(mph), cx + (r - 32) * cos, cy + (r - 32) * sin);
+      }
+    }
+    // "MPH" label
+    spCtx.fillStyle = "#4ade80";
+    spCtx.font = "bold 10px monospace";
+    spCtx.textAlign = "center";
+    spCtx.fillText("MPH", cx, cy + 40);
+    const speedoTex = new THREE.CanvasTexture(speedoCanvas);
+    const speedoFace = new THREE.Mesh(new THREE.CircleGeometry(0.36, 32), new THREE.MeshBasicMaterial({ map: speedoTex, transparent: true }));
+    speedoFace.position.z = 0.005;
+    speedoGrp.add(speedoFace);
+    // Needle
+    const needleGrp = new THREE.Group();
+    const needleMesh = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.28, 0.008), new THREE.MeshPhongMaterial({ color: 0xff3333, emissive: 0x440000 }));
+    needleMesh.position.y = 0.12;
+    needleGrp.add(needleMesh);
+    // Center cap
+    needleGrp.add(new THREE.Mesh(new THREE.CircleGeometry(0.03, 12), new THREE.MeshPhongMaterial({ color: 0xcc0000, shininess: 100 })));
+    needleGrp.position.z = 0.01;
+    speedoGrp.add(needleGrp);
+    // Position on dashboard, left of steering column (driver's instrument cluster)
+    speedoGrp.position.set(-0.88, 2.18, -2.25);
+    speedoGrp.rotation.x = -0.25;
+    interior.add(speedoGrp);
 
     // Mirror
     const mg = new THREE.Group();
@@ -233,7 +394,8 @@ export default function CarListen() {
       amb, dir, skyC, fogC, ambC, dirC, wGrp, hlL, hlR, interior,
       sCanvas, sCtx, sTex, gndMat, roadMat, retroSun, retroGrid, fillL, dashL,
       records, labels, explosion, roadGroup, dashes, DS,
-      stars, starMat, clouds, ptcls, pGeo, pVel, pMat, shooters, birds
+      stars, starMat, clouds, ptcls, pGeo, pVel, pMat, shooters, birds,
+      speedoNeedle: needleGrp
     };
     return renderer;
   }, []);
@@ -317,6 +479,20 @@ export default function CarListen() {
       s.camera.rotation.y = car.angle * 0.5;
       s.camera.rotation.z = car.angle * -0.15 + Math.sin(now * 0.002) * 0.003 * bob;
       if (s.interior) s.interior.rotation.y = car.angle * 0.5;
+
+      // Speedometer needle: 0 mph = -135deg (lower-left), 120 mph = +135deg (lower-right)
+      if (s.speedoNeedle) {
+        const frac = Math.min(car.speed / 120, 1);
+        const needleAngle = (Math.PI * 0.75) - frac * (Math.PI * 1.5); // 135 to -135 degrees
+        s.speedoNeedle.rotation.z = needleAngle;
+      }
+
+      // Road noise tied to speed
+      if (audioCtxRef.current) {
+        const ng = audioCtxRef.current.noiseGain;
+        const vol = Math.min(car.speed / 120, 1) * 0.06;
+        ng.gain.value += (vol - ng.gain.value) * 0.1;
+      }
 
       renderer.render(s.scene, s.camera);
     };
