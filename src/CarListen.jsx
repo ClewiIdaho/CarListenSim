@@ -313,7 +313,7 @@ export default function CarListen() {
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.15, 0.4, 0.92);
     composer.addPass(bloomPass);
     const vignettePass = new ShaderPass(VignetteShader); composer.addPass(vignettePass);
-    const chromaPass = new ShaderPass(ChromaticAberrationShader); composer.addPass(chromaPass);
+    const chromaPass = new ShaderPass(ChromaticAberrationShader); // Added but disabled — no addPass
     // Film grain pass removed for clean image
     const colorPass = new ShaderPass(ColorGradeShader); composer.addPass(colorPass);
     const speedLinesPass = new ShaderPass(SpeedLinesShader); composer.addPass(speedLinesPass);
@@ -365,11 +365,12 @@ export default function CarListen() {
       rCtx.fillStyle = `rgba(${v},${v},${v},0.15)`;
       rCtx.beginPath(); rCtx.arc(rx, ry, rs, 0, Math.PI * 2); rCtx.fill();
     }
-    // Fine subtle speckle (much less than before)
-    for (let i = 0; i < 4000; i++) {
-      const rx = Math.random() * 512, ry = Math.random() * 512;
-      const v = Math.floor(38 + Math.random() * 18);
-      rCtx.fillStyle = `rgba(${v},${v},${v},0.25)`; rCtx.fillRect(rx, ry, 1, 1);
+    // Extra soft mid-scale variation for depth
+    for (let i = 0; i < 100; i++) {
+      const rx = Math.random() * 512, ry = Math.random() * 512, rs = 4 + Math.random() * 12;
+      const v = Math.floor(36 + Math.random() * 22);
+      rCtx.fillStyle = `rgba(${v},${v},${v},0.1)`;
+      rCtx.beginPath(); rCtx.arc(rx, ry, rs, 0, Math.PI * 2); rCtx.fill();
     }
     // Subtle cracks
     rCtx.strokeStyle = "rgba(25,25,25,0.15)"; rCtx.lineWidth = 0.8;
@@ -400,8 +401,8 @@ export default function CarListen() {
     shCtx.fillStyle = "#6a5d4a"; shCtx.fillRect(0, 0, 256, 256);
     // Soft blended patches
     for (let i = 0; i < 120; i++) { const v = 70 + Math.random() * 35; const rs = 6 + Math.random() * 16; shCtx.fillStyle = `rgba(${v+15},${v+8},${v},0.2)`; shCtx.beginPath(); shCtx.arc(Math.random()*256, Math.random()*256, rs, 0, Math.PI*2); shCtx.fill(); }
-    // Light speckle
-    for (let i = 0; i < 2000; i++) { const v = 65 + Math.random() * 40; shCtx.fillStyle = `rgba(${v+15},${v+8},${v},0.2)`; shCtx.fillRect(Math.random() * 256, Math.random() * 256, 1, 1); }
+    // Extra mid-scale patches
+    for (let i = 0; i < 60; i++) { const v = 68 + Math.random() * 30; const rs = 4 + Math.random() * 10; shCtx.fillStyle = `rgba(${v+12},${v+6},${v},0.12)`; shCtx.beginPath(); shCtx.arc(Math.random()*256, Math.random()*256, rs, 0, Math.PI*2); shCtx.fill(); }
     const shoulderTex = new THREE.CanvasTexture(shoulderCanvas);
     shoulderTex.wrapS = THREE.RepeatWrapping; shoulderTex.wrapT = THREE.RepeatWrapping;
     shoulderTex.repeat.set(3, 200);
@@ -419,8 +420,8 @@ export default function CarListen() {
     gCtx.fillStyle = "#3d7030"; gCtx.fillRect(0, 0, 256, 256);
     // Soft color variation patches
     for (let i = 0; i < 150; i++) { const g = 50 + Math.random() * 45; const rs = 8 + Math.random() * 20; gCtx.fillStyle = `rgba(${g-5},${g+25},${g-10},0.18)`; gCtx.beginPath(); gCtx.arc(Math.random()*256, Math.random()*256, rs, 0, Math.PI*2); gCtx.fill(); }
-    // Sparse grass blades instead of pixel noise
-    for (let i = 0; i < 3000; i++) { const g = 45 + Math.random() * 50; gCtx.strokeStyle = `rgba(${g-8},${g+28},${g-12},0.3)`; gCtx.lineWidth = 0.5; gCtx.beginPath(); const bx = Math.random()*256, by = Math.random()*256; gCtx.moveTo(bx, by); gCtx.lineTo(bx + (Math.random()-0.5)*2, by - 1 - Math.random()*3); gCtx.stroke(); }
+    // Extra mid-scale variation
+    for (let i = 0; i < 80; i++) { const g = 48 + Math.random() * 40; const rs = 5 + Math.random() * 14; gCtx.fillStyle = `rgba(${g-3},${g+20},${g-8},0.12)`; gCtx.beginPath(); gCtx.arc(Math.random()*256, Math.random()*256, rs, 0, Math.PI*2); gCtx.fill(); }
     const gndTex = new THREE.CanvasTexture(gndCanvas);
     gndTex.wrapS = THREE.RepeatWrapping; gndTex.wrapT = THREE.RepeatWrapping;
     gndTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -458,16 +459,16 @@ export default function CarListen() {
     }
 
     // === PARTICLES ===
-    const pCount = 150;
+    const pCount = 40;
     const pGeo = new THREE.BufferGeometry();
     const pArr = new Float32Array(pCount * 3);
     const pVel = [];
     for (let i = 0; i < pCount; i++) {
-      pArr[i * 3] = (Math.random() - 0.5) * 80; pArr[i * 3 + 1] = Math.random() * 20; pArr[i * 3 + 2] = -Math.random() * 100;
-      pVel.push({ x: (Math.random() - 0.5) * 2, y: -0.5 - Math.random() * 1.5, z: Math.random() * 0.5, ph: Math.random() * Math.PI * 2 });
+      pArr[i * 3] = (Math.random() - 0.5) * 60; pArr[i * 3 + 1] = 2 + Math.random() * 15; pArr[i * 3 + 2] = -5 - Math.random() * 50;
+      pVel.push({ x: (Math.random() - 0.5) * 1.5, y: -0.3 - Math.random() * 0.8, z: Math.random() * 0.3, ph: Math.random() * Math.PI * 2 });
     }
     pGeo.setAttribute("position", new THREE.BufferAttribute(pArr, 3));
-    const pMat = new THREE.PointsMaterial({ color: 0xffb7c5, size: 0.4, transparent: true, opacity: 0.8 });
+    const pMat = new THREE.PointsMaterial({ color: 0xffb7c5, size: 1.2, transparent: true, opacity: 0.5, sizeAttenuation: true });
     const ptcls = new THREE.Points(pGeo, pMat); scene.add(ptcls);
 
     // === SHOOTING STARS ===
@@ -779,7 +780,7 @@ export default function CarListen() {
         s.speedLinesPass.uniforms.time.value = now * 0.001;
       }
       // Speed line geometry
-      if (s.slMat) s.slMat.opacity = Math.max(0, (sf - 0.4) * 1.5) * 0.25;
+      if (s.slMat) s.slMat.opacity = Math.max(0, (sf - 0.75) * 4) * 0.15;
       if (s.slGeo && sf > 0.4) {
         const sa = s.slGeo.attributes.position.array;
         for (let i = 0; i < sa.length / 6; i++) {
