@@ -251,26 +251,26 @@ export default function CarListen() {
 
   // --- Custom post-processing shaders ---
   const VignetteShader = {
-    uniforms: { tDiffuse: { value: null }, darkness: { value: 0.7 }, offset: { value: 1.1 } },
+    uniforms: { tDiffuse: { value: null }, darkness: { value: 0.4 }, offset: { value: 1.1 } },
     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform float darkness; uniform float offset; varying vec2 vUv;
       void main(){ vec4 c=texture2D(tDiffuse,vUv); vec2 uv=(vUv-0.5)*2.0; float vig=1.0-dot(uv,uv)*darkness*0.35; c.rgb*=clamp(vig,0.0,1.0); gl_FragColor=c; }`
   };
   const FilmGrainShader = {
-    uniforms: { tDiffuse: { value: null }, time: { value: 0 }, intensity: { value: 0.012 } },
+    uniforms: { tDiffuse: { value: null }, time: { value: 0 }, intensity: { value: 0.0 } },
     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform float time; uniform float intensity; varying vec2 vUv;
       float rand(vec2 co){ return fract(sin(dot(co,vec2(12.9898,78.233)))*43758.5453); }
       void main(){ vec4 c=texture2D(tDiffuse,vUv); float g=rand(vUv+fract(time))*2.0-1.0; c.rgb+=vec3(g*intensity); gl_FragColor=c; }`
   };
   const ChromaticAberrationShader = {
-    uniforms: { tDiffuse: { value: null }, amount: { value: 0.0012 } },
+    uniforms: { tDiffuse: { value: null }, amount: { value: 0.0003 } },
     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform float amount; varying vec2 vUv;
       void main(){ vec2 d=(vUv-0.5)*amount; float r=texture2D(tDiffuse,vUv+d).r; float g=texture2D(tDiffuse,vUv).g; float b=texture2D(tDiffuse,vUv-d).b; gl_FragColor=vec4(r,g,b,1.0); }`
   };
   const ColorGradeShader = {
-    uniforms: { tDiffuse: { value: null }, warmth: { value: 0.06 }, contrast: { value: 1.08 } },
+    uniforms: { tDiffuse: { value: null }, warmth: { value: 0.02 }, contrast: { value: 1.04 } },
     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform float warmth; uniform float contrast; varying vec2 vUv;
       void main(){ vec4 c=texture2D(tDiffuse,vUv); c.rgb=(c.rgb-0.5)*contrast+0.5; c.r+=warmth*0.5; c.g+=warmth*0.2; c.b-=warmth*0.15; gl_FragColor=c; }`
@@ -298,7 +298,7 @@ export default function CarListen() {
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     renderer.setSize(w, h); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.3;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
     container.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(68, w / h, 0.1, 2000);
@@ -351,26 +351,35 @@ export default function CarListen() {
 
     // === ROAD with procedural asphalt texture ===
     const roadGroup = new THREE.Group(); scene.add(roadGroup);
-    // Procedural asphalt: canvas texture with noise grain
+    // Procedural asphalt: smooth blended texture
     const roadCanvas = document.createElement("canvas"); roadCanvas.width = 512; roadCanvas.height = 512;
     const rCtx = roadCanvas.getContext("2d");
-    rCtx.fillStyle = "#2a2a2a"; rCtx.fillRect(0, 0, 512, 512);
-    // Asphalt grain
-    for (let i = 0; i < 40000; i++) {
+    rCtx.fillStyle = "#333333"; rCtx.fillRect(0, 0, 512, 512);
+    // Soft large-scale variation (not pixel noise)
+    for (let i = 0; i < 200; i++) {
+      const rx = Math.random() * 512, ry = Math.random() * 512, rs = 8 + Math.random() * 24;
+      const v = Math.floor(42 + Math.random() * 20);
+      rCtx.fillStyle = `rgba(${v},${v},${v},0.15)`;
+      rCtx.beginPath(); rCtx.arc(rx, ry, rs, 0, Math.PI * 2); rCtx.fill();
+    }
+    // Fine subtle speckle (much less than before)
+    for (let i = 0; i < 4000; i++) {
       const rx = Math.random() * 512, ry = Math.random() * 512;
-      const v = Math.floor(30 + Math.random() * 30);
-      rCtx.fillStyle = `rgb(${v},${v},${v})`; rCtx.fillRect(rx, ry, 1 + Math.random(), 1 + Math.random());
+      const v = Math.floor(38 + Math.random() * 18);
+      rCtx.fillStyle = `rgba(${v},${v},${v},0.25)`; rCtx.fillRect(rx, ry, 1, 1);
     }
     // Subtle cracks
-    rCtx.strokeStyle = "rgba(20,20,20,0.3)"; rCtx.lineWidth = 0.5;
-    for (let i = 0; i < 8; i++) {
+    rCtx.strokeStyle = "rgba(25,25,25,0.15)"; rCtx.lineWidth = 0.8;
+    for (let i = 0; i < 5; i++) {
       rCtx.beginPath(); rCtx.moveTo(Math.random() * 512, Math.random() * 512);
-      for (let j = 0; j < 5; j++) rCtx.lineTo(rCtx.canvas.width * Math.random(), rCtx.canvas.height * Math.random());
+      for (let j = 0; j < 4; j++) rCtx.lineTo(rCtx.canvas.width * Math.random(), rCtx.canvas.height * Math.random());
       rCtx.stroke();
     }
     const roadTex = new THREE.CanvasTexture(roadCanvas);
     roadTex.wrapS = THREE.RepeatWrapping; roadTex.wrapT = THREE.RepeatWrapping;
     roadTex.repeat.set(4, 200);
+    roadTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    roadTex.minFilter = THREE.LinearMipmapLinearFilter; roadTex.magFilter = THREE.LinearFilter;
     const roadMat = new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.85, metalness: 0.02 });
     const road = new THREE.Mesh(new THREE.PlaneGeometry(14, 4000), roadMat);
     road.rotation.x = -Math.PI / 2; road.position.set(0, 0.01, -1900); road.receiveShadow = true; roadGroup.add(road);
@@ -385,11 +394,16 @@ export default function CarListen() {
     // Road shoulders (gravel transition)
     const shoulderCanvas = document.createElement("canvas"); shoulderCanvas.width = 256; shoulderCanvas.height = 256;
     const shCtx = shoulderCanvas.getContext("2d");
-    shCtx.fillStyle = "#5a5040"; shCtx.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 15000; i++) { const v = 60 + Math.random() * 50; shCtx.fillStyle = `rgb(${v+20},${v+10},${v})`; shCtx.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 2, 1 + Math.random() * 2); }
+    shCtx.fillStyle = "#6a5d4a"; shCtx.fillRect(0, 0, 256, 256);
+    // Soft blended patches
+    for (let i = 0; i < 120; i++) { const v = 70 + Math.random() * 35; const rs = 6 + Math.random() * 16; shCtx.fillStyle = `rgba(${v+15},${v+8},${v},0.2)`; shCtx.beginPath(); shCtx.arc(Math.random()*256, Math.random()*256, rs, 0, Math.PI*2); shCtx.fill(); }
+    // Light speckle
+    for (let i = 0; i < 2000; i++) { const v = 65 + Math.random() * 40; shCtx.fillStyle = `rgba(${v+15},${v+8},${v},0.2)`; shCtx.fillRect(Math.random() * 256, Math.random() * 256, 1, 1); }
     const shoulderTex = new THREE.CanvasTexture(shoulderCanvas);
     shoulderTex.wrapS = THREE.RepeatWrapping; shoulderTex.wrapT = THREE.RepeatWrapping;
     shoulderTex.repeat.set(3, 200);
+    shoulderTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    shoulderTex.minFilter = THREE.LinearMipmapLinearFilter; shoulderTex.magFilter = THREE.LinearFilter;
     const shoulderMat = new THREE.MeshStandardMaterial({ map: shoulderTex, roughness: 0.95, metalness: 0 });
     for (let sx of [-9.5, 9.5]) {
       const sh = new THREE.Mesh(new THREE.PlaneGeometry(5, 4000), shoulderMat);
@@ -399,10 +413,15 @@ export default function CarListen() {
     // Ground with grass texture
     const gndCanvas = document.createElement("canvas"); gndCanvas.width = 256; gndCanvas.height = 256;
     const gCtx = gndCanvas.getContext("2d");
-    gCtx.fillStyle = "#3a6a2a"; gCtx.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 20000; i++) { const g = 40 + Math.random() * 60; gCtx.fillStyle = `rgb(${g-10},${g+30},${g-15})`; gCtx.fillRect(Math.random() * 256, Math.random() * 256, 1, 1 + Math.random() * 3); }
+    gCtx.fillStyle = "#3d7030"; gCtx.fillRect(0, 0, 256, 256);
+    // Soft color variation patches
+    for (let i = 0; i < 150; i++) { const g = 50 + Math.random() * 45; const rs = 8 + Math.random() * 20; gCtx.fillStyle = `rgba(${g-5},${g+25},${g-10},0.18)`; gCtx.beginPath(); gCtx.arc(Math.random()*256, Math.random()*256, rs, 0, Math.PI*2); gCtx.fill(); }
+    // Sparse grass blades instead of pixel noise
+    for (let i = 0; i < 3000; i++) { const g = 45 + Math.random() * 50; gCtx.strokeStyle = `rgba(${g-8},${g+28},${g-12},0.3)`; gCtx.lineWidth = 0.5; gCtx.beginPath(); const bx = Math.random()*256, by = Math.random()*256; gCtx.moveTo(bx, by); gCtx.lineTo(bx + (Math.random()-0.5)*2, by - 1 - Math.random()*3); gCtx.stroke(); }
     const gndTex = new THREE.CanvasTexture(gndCanvas);
     gndTex.wrapS = THREE.RepeatWrapping; gndTex.wrapT = THREE.RepeatWrapping;
+    gndTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    gndTex.minFilter = THREE.LinearMipmapLinearFilter; gndTex.magFilter = THREE.LinearFilter;
     gndTex.repeat.set(80, 80);
     const gndMat = new THREE.MeshStandardMaterial({ map: gndTex, roughness: 0.95, metalness: 0 });
     const gnd = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), gndMat); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; roadGroup.add(gnd);
@@ -814,7 +833,7 @@ export default function CarListen() {
     }
     // Color grading per time of day
     if (s.colorPass) {
-      const cg = { day: { warmth: 0.04, contrast: 1.06 }, sunset: { warmth: 0.12, contrast: 1.1 }, night: { warmth: -0.03, contrast: 1.15 }, retro: { warmth: 0.02, contrast: 1.2 } };
+      const cg = { day: { warmth: 0.02, contrast: 1.04 }, sunset: { warmth: 0.06, contrast: 1.06 }, night: { warmth: -0.02, contrast: 1.1 }, retro: { warmth: 0.01, contrast: 1.15 } };
       s.colorPass.uniforms.warmth.value = cg[timeOfDay].warmth;
       s.colorPass.uniforms.contrast.value = cg[timeOfDay].contrast;
     }
@@ -826,7 +845,7 @@ export default function CarListen() {
       const hc2 = hemiConfigs[timeOfDay]; s.hemiL.color.set(hc2[0]); s.hemiL.groundColor.set(hc2[1]); s.hemiL.intensity = hc2[2];
     }
     // Tone mapping exposure
-    if (s.renderer) s.renderer.toneMappingExposure = { day: 1.3, sunset: 1.1, night: 0.9, retro: 1.0 }[timeOfDay];
+    if (s.renderer) s.renderer.toneMappingExposure = { day: 1.1, sunset: 1.0, night: 0.85, retro: 0.95 }[timeOfDay];
     if (s.gndMat) s.gndMat.color.set(timeOfDay === "retro" ? 0x0a0020 : ({ forest: 0x4a7a3a, sakura: 0x5a8a4a, city: 0x3a3a3a })[sceneryTheme] || 0x4a7a3a);
     if (s.roadMat) s.roadMat.color.set(timeOfDay === "retro" ? 0x110022 : 0x333333);
     if (s.retroSun) s.retroSun.visible = timeOfDay === "retro";
