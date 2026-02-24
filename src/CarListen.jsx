@@ -22,6 +22,7 @@ export default function CarListen() {
   const scoreRef = useRef(0);
   const aliveRef = useRef(true);
   const hiRef = useRef(0);
+  const shakeRef = useRef(0);
 
   // --- Spatial Audio: simulate car cabin speakers ---
   const initAudioCtx = () => {
@@ -258,7 +259,7 @@ export default function CarListen() {
       const wR = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.15), new THREE.MeshBasicMaterial({ color: 0x222222, side: THREE.DoubleSide }));
       wR.position.x = 0.5; wR.rotation.z = -0.3; bg.add(wR);
       bg.position.set((Math.random() - 0.5) * 200, 25 + Math.random() * 40, -50 - Math.random() * 300);
-      bg.userData = { fs: 8 + Math.random() * 12, wp: Math.random() * Math.PI * 2, wL: wL, wR: wR };
+      bg.userData = { fs: 8 + Math.random() * 12, wp: Math.random() * Math.PI * 2, wL: wL, wR: wR, baseY: bg.position.y };
       scene.add(bg); birds.push(bg);
     }
 
@@ -384,7 +385,7 @@ export default function CarListen() {
     const hlR = new THREE.SpotLight(0xffffcc, 0, 80, 0.4, 0.5); hlR.position.set(1.5, 2, -3); hlR.target.position.set(2, 0, -80); scene.add(hlR); scene.add(hlR.target);
 
     // Game objects
-    const records = []; for (let i = 0; i < 15; i++) { const r = mkRecord(); r.position.set((Math.random() - 0.5) * 10, 1.2, -40 - i * 35); r.rotation.x = Math.PI / 2; scene.add(r); records.push(r); }
+    const records = []; for (let i = 0; i < 15; i++) { const r = mkRecord(); r.position.set((Math.random() - 0.5) * 10, 1.2, -40 - i * 35); r.rotation.x = Math.PI / 2; r.userData.bobPhase = Math.random() * Math.PI * 2; scene.add(r); records.push(r); }
     const labels = []; for (let i = 0; i < 10; i++) { const l = mkLabel(); l.position.set((Math.random() - 0.5) * 10, 0, -60 - i * 50); scene.add(l); labels.push(l); }
     const explosion = mkExplosion(); scene.add(explosion);
 
@@ -442,10 +443,10 @@ export default function CarListen() {
       s.sceneryPool.forEach(o => { o.position.z += spd * dt; o.position.x -= latD; if (o.position.z > 60) { o.position.z -= s.spawnRange; const sd = Math.random() > 0.5 ? 1 : -1; const mt = o.userData.isMountain; o.position.x = sd * ((mt ? (o.userData.radius || 50) + 20 : 14) + Math.random() * (mt ? 120 : 80)) - car.posX; } });
 
       // Records
-      s.records.forEach(rec => { if (!rec.visible) return; rec.position.z += spd * dt; rec.position.x -= latD; rec.rotation.z += dt * 3; rec.position.y = 1.2 + Math.sin(now * 0.003 + rec.position.z) * 0.3; if (rec.position.z > 30) { rec.position.z = -300 - Math.random() * 200; rec.position.x = (Math.random() - 0.5) * 10 - car.posX; rec.visible = true; } if (Math.abs(rec.position.x) < 1.8 && Math.abs(rec.position.z) < 2.5) { rec.visible = false; scoreRef.current += 100; setScore(scoreRef.current); setFlash("record"); setTimeout(() => setFlash(null), 300); setTimeout(() => { rec.visible = true; rec.position.z = -300 - Math.random() * 200; rec.position.x = (Math.random() - 0.5) * 10 - car.posX; }, 2000); } });
+      s.records.forEach(rec => { if (!rec.visible) return; rec.position.z += spd * dt; rec.position.x -= latD; rec.rotation.z += dt * 3; rec.position.y = 1.2 + Math.sin(now * 0.003 + rec.userData.bobPhase) * 0.3; if (rec.position.z > 30) { rec.position.z = -300 - Math.random() * 200; rec.position.x = (Math.random() - 0.5) * 10 - car.posX; rec.visible = true; } if (Math.abs(rec.position.x) < 1.8 && Math.abs(rec.position.z) < 2.5) { rec.visible = false; scoreRef.current += 100; setScore(scoreRef.current); setFlash("record"); setTimeout(() => setFlash(null), 300); setTimeout(() => { rec.visible = true; rec.position.z = -300 - Math.random() * 200; rec.position.x = (Math.random() - 0.5) * 10 - car.posX; }, 2000); } });
 
       // Labels
-      s.labels.forEach(lbl => { if (!lbl.visible) return; lbl.position.z += spd * dt; lbl.position.x -= latD; lbl.rotation.y += dt * 1.5; if (lbl.userData.light) lbl.userData.light.material.opacity = Math.sin(now * 0.01) > 0 ? 1 : 0.2; if (lbl.position.z > 30) { lbl.position.z = -350 - Math.random() * 250; lbl.position.x = (Math.random() - 0.5) * 10 - car.posX; lbl.visible = true; } if (Math.abs(lbl.position.x) < 1.5 && Math.abs(lbl.position.z) < 2) { aliveRef.current = false; setAlive(false); setFlash("boom"); if (scoreRef.current > hiRef.current) { hiRef.current = scoreRef.current; setHighScore(scoreRef.current); } if (s.explosion) { s.explosion.position.copy(lbl.position); s.explosion.visible = true; s.explosion.children.forEach(ch => { ch.material.opacity = 0.8; ch.scale.set(1, 1, 1); }); } lbl.visible = false; car.speed = 0; s.camera.rotation.z = 0.1; setTimeout(() => { if (s.camera) s.camera.rotation.z = 0; }, 200); } });
+      s.labels.forEach(lbl => { if (!lbl.visible) return; lbl.position.z += spd * dt; lbl.position.x -= latD; lbl.rotation.y += dt * 1.5; if (lbl.userData.light) lbl.userData.light.material.opacity = Math.sin(now * 0.01) > 0 ? 1 : 0.2; if (lbl.position.z > 30) { lbl.position.z = -350 - Math.random() * 250; lbl.position.x = (Math.random() - 0.5) * 10 - car.posX; lbl.visible = true; } if (Math.abs(lbl.position.x) < 1.5 && Math.abs(lbl.position.z) < 2) { aliveRef.current = false; setAlive(false); setFlash("boom"); if (scoreRef.current > hiRef.current) { hiRef.current = scoreRef.current; setHighScore(scoreRef.current); } if (s.explosion) { s.explosion.position.copy(lbl.position); s.explosion.visible = true; s.explosion.children.forEach(ch => { ch.material.opacity = 0.8; ch.scale.set(1, 1, 1); }); } lbl.visible = false; car.speed = 0; shakeRef.current = 0.12; } });
 
       // Retro grid
       if (s.retroGrid && s.retroGrid.visible) s.retroGrid.position.x = -car.posX;
@@ -469,7 +470,7 @@ export default function CarListen() {
       s.shooters.forEach(ss => { ss.userData.timer += dt * 60; if (!ss.userData.on && ss.userData.timer > ss.userData.interval) { ss.userData.on = true; ss.userData.timer = 0; ss.position.set((Math.random() - 0.5) * 400, 80 + Math.random() * 80, -200 - Math.random() * 300); ss.material.opacity = 1; } if (ss.userData.on) { ss.position.x += ss.userData.spd * dt; ss.position.y -= ss.userData.spd * 0.3 * dt; ss.material.opacity -= dt * 0.8; if (ss.material.opacity <= 0) { ss.userData.on = false; ss.userData.interval = 300 + Math.random() * 600; ss.material.opacity = 0; } } });
 
       // Birds
-      s.birds.forEach(b => { b.position.x += b.userData.fs * dt; b.position.y += Math.sin(now * 0.002 + b.userData.wp) * 0.02; b.position.z += spd * dt * 0.1; const flap = Math.sin(now * 0.008 + b.userData.wp); if (b.userData.wL) b.userData.wL.rotation.z = 0.3 + flap * 0.4; if (b.userData.wR) b.userData.wR.rotation.z = -0.3 - flap * 0.4; if (b.position.x > 250 || b.position.z > 50) b.position.set(-200 - Math.random() * 100, 25 + Math.random() * 40, -50 - Math.random() * 300); });
+      s.birds.forEach(b => { b.position.x += b.userData.fs * dt; b.position.y = b.userData.baseY + Math.sin(now * 0.002 + b.userData.wp) * 2; b.position.z += spd * dt * 0.1; const flap = Math.sin(now * 0.008 + b.userData.wp); if (b.userData.wL) b.userData.wL.rotation.z = 0.3 + flap * 0.4; if (b.userData.wR) b.userData.wR.rotation.z = -0.3 - flap * 0.4; if (b.position.x > 250 || b.position.z > 50) { const newY = 25 + Math.random() * 40; b.userData.baseY = newY; b.position.set(-200 - Math.random() * 100, newY, -50 - Math.random() * 300); } });
 
       // Car interior
       if (s.wGrp) s.wGrp.rotation.z = car.steering * 1.2 + Math.sin(now * 0.001) * 0.008;
@@ -477,21 +478,22 @@ export default function CarListen() {
       s.camera.position.y = 3.5 + Math.sin(now * 0.004) * 0.02 * bob;
       s.camera.position.x = 0;
       s.camera.rotation.y = car.angle * 0.5;
-      s.camera.rotation.z = car.angle * -0.15 + Math.sin(now * 0.002) * 0.003 * bob;
+      if (shakeRef.current > 0.001) { shakeRef.current *= Math.exp(-8 * dt); } else { shakeRef.current = 0; }
+      s.camera.rotation.z = car.angle * -0.15 + Math.sin(now * 0.002) * 0.003 * bob + (Math.sin(now * 0.03) * shakeRef.current);
       if (s.interior) s.interior.rotation.y = car.angle * 0.5;
 
-      // Speedometer needle: 0 mph = -135deg (lower-left), 120 mph = +135deg (lower-right)
+      // Speedometer needle with inertia: smooth lerp toward target
       if (s.speedoNeedle) {
         const frac = Math.min(car.speed / 120, 1);
-        const needleAngle = (Math.PI * 0.75) - frac * (Math.PI * 1.5); // 135 to -135 degrees
-        s.speedoNeedle.rotation.z = needleAngle;
+        const targetAngle = (Math.PI * 0.75) - frac * (Math.PI * 1.5);
+        s.speedoNeedle.rotation.z += (targetAngle - s.speedoNeedle.rotation.z) * (1 - Math.exp(-6 * dt));
       }
 
-      // Road noise tied to speed
+      // Road noise tied to speed (framerate-independent smoothing)
       if (audioCtxRef.current) {
         const ng = audioCtxRef.current.noiseGain;
         const vol = Math.min(car.speed / 120, 1) * 0.06;
-        ng.gain.value += (vol - ng.gain.value) * 0.1;
+        ng.gain.value += (vol - ng.gain.value) * (1 - Math.exp(-5 * dt));
       }
 
       renderer.render(s.scene, s.camera);
@@ -534,7 +536,7 @@ export default function CarListen() {
     const draw = () => {
       ctx.fillStyle = "#020a04"; ctx.fillRect(0, 0, cw, ch);
       if (!audioName) { ctx.fillStyle = "#0a6"; ctx.font = "bold 16px monospace"; ctx.textAlign = "center"; ctx.fillText("NO DISC", cw / 2, ch / 2 + 5); }
-      else { const p = isPlaying, glow = p ? `rgb(${40 + Math.sin(Date.now() * 0.004) * 20},${220 + Math.sin(Date.now() * 0.003) * 35},80)` : "#0a6"; ctx.fillStyle = glow; ctx.font = "bold 14px monospace"; const t = audioName.toUpperCase(), tw = ctx.measureText(t).width; if (tw > cw - 20 && p) { ctx.textAlign = "left"; ctx.fillText(t, cw - (Date.now() * 0.03) % (tw + 80), 22); } else { ctx.textAlign = "center"; ctx.fillText(t.length > 18 ? t.slice(0, 18) + "…" : t, cw / 2, 22); } ctx.fillStyle = p ? "#0f4" : "#073"; ctx.font = "11px monospace"; ctx.textAlign = "center"; ctx.fillText(p ? "▶ NOW PLAYING" : "❚❚ PAUSED", cw / 2, 46); if (p) for (let i = 0; i < 8; i++) { ctx.fillStyle = glow; const bh = 4 + Math.random() * 14; ctx.fillRect(cw - 18 - i * 6, ch - 4 - bh, 4, bh); } }
+      else { const p = isPlaying, glow = p ? `rgb(${40 + Math.sin(Date.now() * 0.004) * 20},${220 + Math.sin(Date.now() * 0.003) * 35},80)` : "#0a6"; ctx.fillStyle = glow; ctx.font = "bold 14px monospace"; const t = audioName.toUpperCase(), tw = ctx.measureText(t).width; if (tw > cw - 20 && p) { ctx.textAlign = "left"; ctx.fillText(t, cw - (Date.now() * 0.03) % (tw + 80), 22); } else { ctx.textAlign = "center"; ctx.fillText(t.length > 18 ? t.slice(0, 18) + "…" : t, cw / 2, 22); } ctx.fillStyle = p ? "#0f4" : "#073"; ctx.font = "11px monospace"; ctx.textAlign = "center"; ctx.fillText(p ? "▶ NOW PLAYING" : "❚❚ PAUSED", cw / 2, 46); if (p) { const bt = Date.now() * 0.004; for (let i = 0; i < 8; i++) { ctx.fillStyle = glow; const bh = 4 + (Math.sin(bt * (1.2 + i * 0.4) + i * 1.8) * 0.5 + 0.5) * 12 + Math.sin(bt * (0.7 + i * 0.3) + i * 2.5) * 2; ctx.fillRect(cw - 18 - i * 6, ch - 4 - bh, 4, bh); } } }
       if (s.sTex) s.sTex.needsUpdate = true; fid = requestAnimationFrame(draw);
     }; draw(); return () => cancelAnimationFrame(fid);
   }, [audioName, isPlaying]);
@@ -542,7 +544,7 @@ export default function CarListen() {
   return (
     <div style={{ width: "100vw", height: "100vh", background: "#000", position: "relative", overflow: "hidden" }}>
       <div ref={mountRef} style={{ width: "100%", height: "100%" }} />
-      {flash && <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: flash === "record" ? "rgba(255,215,0,0.15)" : "rgba(255,0,0,0.25)", transition: "opacity 0.3s" }} />}
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: flash === "record" ? "rgba(255,215,0,0.25)" : flash === "boom" ? "rgba(255,0,0,0.35)" : "transparent", opacity: flash ? 1 : 0, transition: "opacity 0.3s ease-out" }} />
       <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 16, alignItems: "center" }}>
         <div style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", borderRadius: 12, padding: "8px 18px", color: "#fff", border: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
           <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: 2 }}>SCORE</div>
