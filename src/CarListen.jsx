@@ -251,13 +251,13 @@ export default function CarListen() {
 
   // --- Custom post-processing shaders ---
   const VignetteShader = {
-    uniforms: { tDiffuse: { value: null }, darkness: { value: 1.2 }, offset: { value: 1.1 } },
+    uniforms: { tDiffuse: { value: null }, darkness: { value: 0.7 }, offset: { value: 1.1 } },
     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform float darkness; uniform float offset; varying vec2 vUv;
       void main(){ vec4 c=texture2D(tDiffuse,vUv); vec2 uv=(vUv-0.5)*2.0; float vig=1.0-dot(uv,uv)*darkness*0.35; c.rgb*=clamp(vig,0.0,1.0); gl_FragColor=c; }`
   };
   const FilmGrainShader = {
-    uniforms: { tDiffuse: { value: null }, time: { value: 0 }, intensity: { value: 0.06 } },
+    uniforms: { tDiffuse: { value: null }, time: { value: 0 }, intensity: { value: 0.012 } },
     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform float time; uniform float intensity; varying vec2 vUv;
       float rand(vec2 co){ return fract(sin(dot(co,vec2(12.9898,78.233)))*43758.5453); }
@@ -307,7 +307,7 @@ export default function CarListen() {
     // === POST-PROCESSING PIPELINE ===
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.35, 0.6, 0.85);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.15, 0.4, 0.92);
     composer.addPass(bloomPass);
     const vignettePass = new ShaderPass(VignetteShader); composer.addPass(vignettePass);
     const chromaPass = new ShaderPass(ChromaticAberrationShader); composer.addPass(chromaPass);
@@ -773,9 +773,9 @@ export default function CarListen() {
         s.slGeo.attributes.position.needsUpdate = true;
       }
       // Chromatic aberration increases with speed
-      if (s.chromaPass) s.chromaPass.uniforms.amount.value = 0.0008 + sf * 0.002;
+      if (s.chromaPass) s.chromaPass.uniforms.amount.value = 0.0003 + sf * 0.001;
       // Bloom increases slightly at high speed
-      if (s.bloomPass) s.bloomPass.strength = 0.3 + sf * 0.2;
+      if (s.bloomPass) s.bloomPass.strength = 0.12 + sf * 0.12;
       // Headlight cone intensity
       if (s.hlConeL) s.hlConeL.material.uniforms.intensity.value = s.hlL.intensity > 0 ? 1 : 0;
       if (s.hlConeR) s.hlConeR.material.uniforms.intensity.value = s.hlR.intensity > 0 ? 1 : 0;
@@ -819,7 +819,7 @@ export default function CarListen() {
       s.colorPass.uniforms.contrast.value = cg[timeOfDay].contrast;
     }
     // Bloom per time of day
-    if (s.bloomPass) s.bloomPass.threshold = { day: 0.85, sunset: 0.7, night: 0.6, retro: 0.5 }[timeOfDay];
+    if (s.bloomPass) s.bloomPass.threshold = { day: 0.92, sunset: 0.85, night: 0.78, retro: 0.7 }[timeOfDay];
     // Hemisphere light
     if (s.hemiL) {
       const hemiConfigs = { day: [0x88bbff, 0x445522, 0.3], sunset: [0xff8844, 0x332211, 0.25], night: [0x112244, 0x111111, 0.1], retro: [0x660088, 0x110022, 0.2] };
