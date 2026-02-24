@@ -3,7 +3,9 @@ import * as THREE from "three";
 
 export default function CarListen() {
   const mountRef = useRef(null);
-  const [audioName, setAudioName] = useState("");
+  const [inLobby, setInLobby] = useState(true);
+  const [tracks, setTracks] = useState([]); // [{name, url, audio, source}] max 3
+  const [trackIdx, setTrackIdx] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [timeOfDay, setTimeOfDay] = useState("day");
   const [sceneryTheme, setSceneryTheme] = useState("forest");
@@ -12,7 +14,6 @@ export default function CarListen() {
   const [highScore, setHighScore] = useState(0);
   const [alive, setAlive] = useState(true);
   const [flash, setFlash] = useState(null);
-  const audioRef = useRef(null);
   const audioCtxRef = useRef(null);
   const animRef = useRef(null);
   const sceneRef = useRef({});
@@ -23,112 +24,109 @@ export default function CarListen() {
   const aliveRef = useRef(true);
   const hiRef = useRef(0);
   const shakeRef = useRef(0);
+  const tracksRef = useRef([]);
 
-  // --- Spatial Audio: simulate car cabin speakers ---
+  // --- Spatial Audio: car cabin speaker chain ---
   const initAudioCtx = () => {
     if (audioCtxRef.current) return audioCtxRef.current;
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    // Create cabin reverb via convolver with synthetic impulse
     const rate = ctx.sampleRate;
-    const len = Math.floor(rate * 0.35); // short reverb for small car cabin
+    const len = Math.floor(rate * 0.35);
     const impulse = ctx.createBuffer(2, len, rate);
     for (let ch = 0; ch < 2; ch++) {
       const d = impulse.getChannelData(ch);
-      for (let i = 0; i < len; i++) {
-        // Exponential decay with some early reflections
-        const t = i / rate;
-        const decay = Math.exp(-t * 12);
-        const early = i < rate * 0.02 ? 0.6 : 1;
-        d[i] = (Math.random() * 2 - 1) * decay * early * 0.4;
-      }
+      for (let i = 0; i < len; i++) { const t = i / rate; d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 12) * (i < rate * 0.02 ? 0.6 : 1) * 0.4; }
     }
-    const convolver = ctx.createConvolver();
-    convolver.buffer = impulse;
-    // Low-pass to simulate muffled car interior
-    const cabinLPF = ctx.createBiquadFilter();
-    cabinLPF.type = "lowpass";
-    cabinLPF.frequency.value = 8000;
-    cabinLPF.Q.value = 0.7;
-    // Slight bass boost like car subwoofer
-    const bassBoost = ctx.createBiquadFilter();
-    bassBoost.type = "peaking";
-    bassBoost.frequency.value = 80;
-    bassBoost.gain.value = 6;
-    bassBoost.Q.value = 1.2;
-    // Stereo panner nodes for L/R speaker simulation
-    const panL = ctx.createStereoPanner();
-    panL.pan.value = -0.6;
-    const panR = ctx.createStereoPanner();
-    panR.pan.value = 0.6;
-    // Gains
-    const dryGain = ctx.createGain();
-    dryGain.gain.value = 0.7;
-    const wetGain = ctx.createGain();
-    wetGain.gain.value = 0.35;
-    const masterGain = ctx.createGain();
-    masterGain.gain.value = 1.0;
-    // Road noise generator
+    const convolver = ctx.createConvolver(); convolver.buffer = impulse;
+    const cabinLPF = ctx.createBiquadFilter(); cabinLPF.type = "lowpass"; cabinLPF.frequency.value = 8000; cabinLPF.Q.value = 0.7;
+    const bassBoost = ctx.createBiquadFilter(); bassBoost.type = "peaking"; bassBoost.frequency.value = 80; bassBoost.gain.value = 6; bassBoost.Q.value = 1.2;
+    const panL = ctx.createStereoPanner(); panL.pan.value = -0.6;
+    const panR = ctx.createStereoPanner(); panR.pan.value = 0.6;
+    const dryGain = ctx.createGain(); dryGain.gain.value = 0.7;
+    const wetGain = ctx.createGain(); wetGain.gain.value = 0.35;
+    const masterGain = ctx.createGain(); masterGain.gain.value = 1.0;
+    // Permanent downstream chain (set up once)
+    bassBoost.connect(cabinLPF);
+    cabinLPF.connect(panL); cabinLPF.connect(panR);
+    panL.connect(dryGain); panR.connect(dryGain);
+    dryGain.connect(masterGain);
+    convolver.connect(wetGain); wetGain.connect(masterGain);
+    masterGain.connect(ctx.destination);
+    // Road noise
     const noiseNode = ctx.createBufferSource();
-    const noiseLen = Math.floor(rate * 2);
-    const noiseBuf = ctx.createBuffer(1, noiseLen, rate);
-    const noiseData = noiseBuf.getChannelData(0);
-    for (let i = 0; i < noiseLen; i++) noiseData[i] = (Math.random() * 2 - 1);
-    noiseNode.buffer = noiseBuf;
-    noiseNode.loop = true;
-    const noiseLPF = ctx.createBiquadFilter();
-    noiseLPF.type = "lowpass";
-    noiseLPF.frequency.value = 200;
-    noiseLPF.Q.value = 0.5;
-    const noiseGain = ctx.createGain();
-    noiseGain.gain.value = 0;
-    noiseNode.connect(noiseLPF).connect(noiseGain).connect(ctx.destination);
-    noiseNode.start();
-
-    audioCtxRef.current = {
-      ctx, convolver, cabinLPF, bassBoost, panL, panR,
-      dryGain, wetGain, masterGain, noiseGain, sourceNode: null
-    };
+    const noiseBuf = ctx.createBuffer(1, Math.floor(rate * 2), rate);
+    const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    noiseNode.buffer = noiseBuf; noiseNode.loop = true;
+    const noiseLPF = ctx.createBiquadFilter(); noiseLPF.type = "lowpass"; noiseLPF.frequency.value = 200; noiseLPF.Q.value = 0.5;
+    const noiseGain = ctx.createGain(); noiseGain.gain.value = 0;
+    noiseNode.connect(noiseLPF).connect(noiseGain).connect(ctx.destination); noiseNode.start();
+    audioCtxRef.current = { ctx, convolver, bassBoost, noiseGain, activeSource: null };
     return audioCtxRef.current;
   };
 
-  const connectSource = (audioEl) => {
+  const connectTrack = (track) => {
     const ac = initAudioCtx();
-    // Disconnect old source
-    if (ac.sourceNode) { try { ac.sourceNode.disconnect(); } catch (e) { /* ok */ } }
-    const src = ac.ctx.createMediaElementSource(audioEl);
-    ac.sourceNode = src;
-    // Dry path: source -> bassBoost -> cabinLPF -> panL/panR -> dryGain
-    src.connect(ac.bassBoost);
-    ac.bassBoost.connect(ac.cabinLPF);
-    ac.cabinLPF.connect(ac.panL);
-    ac.cabinLPF.connect(ac.panR);
-    ac.panL.connect(ac.dryGain);
-    ac.panR.connect(ac.dryGain);
-    ac.dryGain.connect(ac.masterGain);
-    // Wet path: source -> convolver -> wetGain
-    src.connect(ac.convolver);
-    ac.convolver.connect(ac.wetGain);
-    ac.wetGain.connect(ac.masterGain);
-    // Master -> output
-    ac.masterGain.connect(ac.ctx.destination);
+    if (ac.activeSource) { try { ac.activeSource.disconnect(); } catch (e) { /* ok */ } }
+    if (!track.source) { track.source = ac.ctx.createMediaElementSource(track.audio); }
+    track.source.connect(ac.bassBoost);
+    track.source.connect(ac.convolver);
+    ac.activeSource = track.source;
   };
 
-  const handleFile = e => {
-    const f = e.target.files[0]; if (!f) return;
-    if (audioRef.current) audioRef.current.pause();
-    const audio = new Audio(URL.createObjectURL(f));
+  const addTrack = (file) => {
+    if (tracksRef.current.length >= 3) return;
+    const audio = new Audio(URL.createObjectURL(file));
     audio.crossOrigin = "anonymous";
-    audioRef.current = audio;
-    connectSource(audio);
-    setAudioName(f.name.replace(/\.[^/.]+$/, "")); setIsPlaying(false);
+    const t = { name: file.name.replace(/\.[^/.]+$/, ""), audio, source: null };
+    // Auto-advance to next track when song ends
+    audio.addEventListener("ended", () => {
+      const all = tracksRef.current;
+      const idx = all.indexOf(t);
+      if (idx >= 0 && idx < all.length - 1) { playTrack(idx + 1); }
+      else if (all.length > 0) { playTrack(0); }
+    });
+    tracksRef.current = [...tracksRef.current, t];
+    setTracks([...tracksRef.current]);
   };
-  const togglePlay = () => {
-    if (!audioRef.current) return;
+
+  const removeTrack = (idx) => {
+    const all = tracksRef.current;
+    if (all[idx]?.audio) { all[idx].audio.pause(); if (all[idx].source) try { all[idx].source.disconnect(); } catch (e) {} }
+    tracksRef.current = all.filter((_, i) => i !== idx);
+    setTracks([...tracksRef.current]);
+    if (trackIdx >= tracksRef.current.length) setTrackIdx(Math.max(0, tracksRef.current.length - 1));
+    if (tracksRef.current.length === 0) setIsPlaying(false);
+  };
+
+  const playTrack = (idx) => {
+    const all = tracksRef.current;
+    if (!all.length) return;
+    all.forEach(t => t.audio.pause());
+    const t = all[idx % all.length];
+    connectTrack(t);
     const ac = audioCtxRef.current;
     if (ac && ac.ctx.state === "suspended") ac.ctx.resume();
-    if (isPlaying) audioRef.current.pause(); else audioRef.current.play();
-    setIsPlaying(!isPlaying);
+    t.audio.currentTime = 0; t.audio.play();
+    setTrackIdx(idx % all.length);
+    setIsPlaying(true);
   };
+
+  const togglePlay = () => {
+    const all = tracksRef.current;
+    if (!all.length) return;
+    const ac = audioCtxRef.current;
+    if (ac && ac.ctx.state === "suspended") ac.ctx.resume();
+    const t = all[trackIdx];
+    if (!t) return;
+    if (isPlaying) { t.audio.pause(); setIsPlaying(false); }
+    else { if (!ac?.activeSource || ac.activeSource !== t.source) connectTrack(t); t.audio.play(); setIsPlaying(true); }
+  };
+
+  const nextTrack = () => { const all = tracksRef.current; if (all.length < 2) return; playTrack((trackIdx + 1) % all.length); };
+  const prevTrack = () => { const all = tracksRef.current; if (all.length < 2) return; playTrack((trackIdx - 1 + all.length) % all.length); };
+
+  const startGame = () => { setInLobby(false); if (tracksRef.current.length > 0) playTrack(0); };
+
   const restart = () => { const s = sceneRef.current; aliveRef.current = true; setAlive(true); scoreRef.current = 0; setScore(0); carRef.current = { speed: 0, steering: 0, posX: 0, angle: 0 }; if (s.records) s.records.forEach((r, i) => { r.visible = true; r.position.z = -40 - i * 35; r.position.x = (Math.random() - 0.5) * 10; }); if (s.labels) s.labels.forEach((m, i) => { m.visible = true; m.position.z = -60 - i * 50; m.position.x = (Math.random() - 0.5) * 10; }); if (s.explosion) s.explosion.visible = false; if (s.roadGroup) s.roadGroup.position.x = 0; };
 
   // Scenery factories
@@ -533,61 +531,143 @@ export default function CarListen() {
   useEffect(() => {
     const s = sceneRef.current; if (!s.sCtx) return;
     const ctx = s.sCtx, cw = s.sCanvas.width, ch = s.sCanvas.height; let fid;
+    const currentName = tracks[trackIdx]?.name || "";
     const draw = () => {
       ctx.fillStyle = "#020a04"; ctx.fillRect(0, 0, cw, ch);
-      if (!audioName) { ctx.fillStyle = "#0a6"; ctx.font = "bold 16px monospace"; ctx.textAlign = "center"; ctx.fillText("NO DISC", cw / 2, ch / 2 + 5); }
-      else { const p = isPlaying, glow = p ? `rgb(${40 + Math.sin(Date.now() * 0.004) * 20},${220 + Math.sin(Date.now() * 0.003) * 35},80)` : "#0a6"; ctx.fillStyle = glow; ctx.font = "bold 14px monospace"; const t = audioName.toUpperCase(), tw = ctx.measureText(t).width; if (tw > cw - 20 && p) { ctx.textAlign = "left"; ctx.fillText(t, cw - (Date.now() * 0.03) % (tw + 80), 22); } else { ctx.textAlign = "center"; ctx.fillText(t.length > 18 ? t.slice(0, 18) + "…" : t, cw / 2, 22); } ctx.fillStyle = p ? "#0f4" : "#073"; ctx.font = "11px monospace"; ctx.textAlign = "center"; ctx.fillText(p ? "▶ NOW PLAYING" : "❚❚ PAUSED", cw / 2, 46); if (p) { const bt = Date.now() * 0.004; for (let i = 0; i < 8; i++) { ctx.fillStyle = glow; const bh = 4 + (Math.sin(bt * (1.2 + i * 0.4) + i * 1.8) * 0.5 + 0.5) * 12 + Math.sin(bt * (0.7 + i * 0.3) + i * 2.5) * 2; ctx.fillRect(cw - 18 - i * 6, ch - 4 - bh, 4, bh); } } }
+      if (!currentName) { ctx.fillStyle = "#0a6"; ctx.font = "bold 16px monospace"; ctx.textAlign = "center"; ctx.fillText("NO DISC", cw / 2, ch / 2 + 5); }
+      else { const p = isPlaying, glow = p ? `rgb(${40 + Math.sin(Date.now() * 0.004) * 20},${220 + Math.sin(Date.now() * 0.003) * 35},80)` : "#0a6"; ctx.fillStyle = glow; ctx.font = "bold 14px monospace"; const t = currentName.toUpperCase(), tw = ctx.measureText(t).width; if (tw > cw - 20 && p) { ctx.textAlign = "left"; ctx.fillText(t, cw - (Date.now() * 0.03) % (tw + 80), 22); } else { ctx.textAlign = "center"; ctx.fillText(t.length > 18 ? t.slice(0, 18) + "…" : t, cw / 2, 22); } ctx.fillStyle = "#073"; ctx.font = "9px monospace"; ctx.textAlign = "left"; ctx.fillText(`${trackIdx + 1}/${tracks.length}`, 6, 46); ctx.fillStyle = p ? "#0f4" : "#073"; ctx.font = "11px monospace"; ctx.textAlign = "center"; ctx.fillText(p ? "▶ PLAYING" : "❚❚ PAUSED", cw / 2, 46); if (p) { const bt = Date.now() * 0.004; for (let i = 0; i < 8; i++) { ctx.fillStyle = glow; const bh = 4 + (Math.sin(bt * (1.2 + i * 0.4) + i * 1.8) * 0.5 + 0.5) * 12 + Math.sin(bt * (0.7 + i * 0.3) + i * 2.5) * 2; ctx.fillRect(cw - 18 - i * 6, ch - 4 - bh, 4, bh); } } }
       if (s.sTex) s.sTex.needsUpdate = true; fid = requestAnimationFrame(draw);
     }; draw(); return () => cancelAnimationFrame(fid);
-  }, [audioName, isPlaying]);
+  }, [tracks, trackIdx, isPlaying]);
+
+  const curName = tracks[trackIdx]?.name || "";
+  const lobbyBtnBase = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, color: "#fff", cursor: "pointer", transition: "all 0.2s" };
 
   return (
     <div style={{ width: "100vw", height: "100vh", background: "#000", position: "relative", overflow: "hidden" }}>
+      <style>{`
+        @keyframes lobbyGlow { 0%,100%{text-shadow:0 0 20px rgba(74,222,128,0.3),0 0 60px rgba(74,222,128,0.1)} 50%{text-shadow:0 0 40px rgba(74,222,128,0.6),0 0 100px rgba(74,222,128,0.2)} }
+        @keyframes lobbyPulse { 0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(74,222,128,0.4)} 50%{transform:scale(1.03);box-shadow:0 0 30px 4px rgba(74,222,128,0.15)} }
+        @keyframes fadeSlideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes floatVinyl { 0%,100%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+        @keyframes gradientShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+      `}</style>
       <div ref={mountRef} style={{ width: "100%", height: "100%" }} />
-      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: flash === "record" ? "rgba(255,215,0,0.25)" : flash === "boom" ? "rgba(255,0,0,0.35)" : "transparent", opacity: flash ? 1 : 0, transition: "opacity 0.3s ease-out" }} />
-      <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 16, alignItems: "center" }}>
-        <div style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", borderRadius: 12, padding: "8px 18px", color: "#fff", border: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
-          <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: 2 }}>SCORE</div>
-          <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "monospace", color: "#ffdd00" }}>{score}</div>
+
+      {/* ===== LOBBY SCREEN ===== */}
+      {inLobby && <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "radial-gradient(ellipse at 50% 40%, rgba(10,20,30,0.85) 0%, rgba(0,0,0,0.95) 100%)", backdropFilter: "blur(6px)", zIndex: 10 }}>
+        {/* Animated background gradient bar */}
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "linear-gradient(90deg, #4ade80, #60a5fa, #a78bfa, #f472b6, #4ade80)", backgroundSize: "200% 100%", animation: "gradientShift 4s ease infinite" }} />
+
+        {/* Title */}
+        <div style={{ animation: "fadeSlideUp 0.8s ease both", textAlign: "center", marginBottom: 8 }}>
+          <div style={{ fontSize: 14, letterSpacing: 6, color: "rgba(255,255,255,0.3)", fontWeight: 500, marginBottom: 8 }}>WELCOME TO</div>
+          <div style={{ fontSize: "clamp(36px, 7vw, 64px)", fontWeight: 900, letterSpacing: 3, color: "#fff", animation: "lobbyGlow 3s ease-in-out infinite", lineHeight: 1.1 }}>AERA CAR TESTER</div>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 8, letterSpacing: 2 }}>SPATIAL AUDIO DRIVING EXPERIENCE</div>
         </div>
-        {highScore > 0 && <div style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", borderRadius: 12, padding: "8px 14px", color: "#fff", border: "1px solid rgba(255,215,0,0.15)", textAlign: "center" }}>
-          <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: 2 }}>HIGH</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace", color: "#ff8800" }}>{highScore}</div>
-        </div>}
-      </div>
-      {!alive && <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
-        <div style={{ fontSize: 56, fontWeight: 900, color: "#ff3333", textShadow: "0 0 30px rgba(255,0,0,0.5)", letterSpacing: 4 }}>SIGNED 📝</div>
-        <div style={{ fontSize: 16, color: "#fff", marginTop: 6, opacity: 0.5 }}>The label got you...</div>
-        <div style={{ fontSize: 20, color: "#fff", marginTop: 12, opacity: 0.8 }}>Score: <span style={{ color: "#ffdd00", fontWeight: 700 }}>{score}</span></div>
-        {score >= highScore && score > 0 && <div style={{ fontSize: 16, color: "#ff8800", marginTop: 6 }}>🏆 NEW HIGH SCORE!</div>}
-        <button onClick={restart} style={{ marginTop: 24, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 12, padding: "12px 32px", color: "#fff", fontSize: 18, fontWeight: 700, cursor: "pointer", letterSpacing: 2 }} onMouseEnter={e => e.target.style.background = "rgba(255,255,255,0.25)"} onMouseLeave={e => e.target.style.background = "rgba(255,255,255,0.12)"}>RESTART</button>
+
+        {/* Description cards */}
+        <div style={{ display: "flex", gap: 16, marginTop: 28, flexWrap: "wrap", justifyContent: "center", maxWidth: 600, padding: "0 16px" }}>
+          {[
+            { icon: "💿", text: "Collect records, avoid Labels", color: "#ffdd00", delay: "0.3s" },
+            { icon: "📝", text: "Avoid getting Signed", color: "#ff6b6b", delay: "0.5s" },
+            { icon: "🔊", text: "Test your track with spatial audio", color: "#4ade80", delay: "0.7s" },
+          ].map(({ icon, text, color, delay }) => (
+            <div key={text} style={{ animation: `fadeSlideUp 0.7s ease ${delay} both`, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "12px 18px", display: "flex", alignItems: "center", gap: 10, minWidth: 170 }}>
+              <span style={{ fontSize: 22 }}>{icon}</span>
+              <span style={{ fontSize: 13, color, fontWeight: 600 }}>{text}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Track upload area */}
+        <div style={{ animation: "fadeSlideUp 0.7s ease 0.9s both", marginTop: 36, textAlign: "center" }}>
+          <div style={{ fontSize: 11, letterSpacing: 3, color: "rgba(255,255,255,0.3)", marginBottom: 12 }}>LOAD YOUR TRACKS (UP TO 3)</div>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            {[0, 1, 2].map(i => {
+              const t = tracks[i];
+              return (
+                <div key={i} style={{ width: 160, height: 80, borderRadius: 14, border: t ? "1px solid rgba(74,222,128,0.3)" : "2px dashed rgba(255,255,255,0.12)", background: t ? "rgba(74,222,128,0.06)" : "rgba(255,255,255,0.02)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative", transition: "all 0.3s" }}>
+                  {t ? (<>
+                    <div style={{ fontSize: 11, color: "#4ade80", fontWeight: 700, maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>{t.name}</div>
+                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>Track {i + 1}</div>
+                    <button onClick={() => removeTrack(i)} style={{ position: "absolute", top: 4, right: 6, background: "none", border: "none", color: "rgba(255,255,255,0.3)", fontSize: 14, cursor: "pointer", padding: 0, lineHeight: 1 }}>x</button>
+                  </>) : (
+                    <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, width: "100%", height: "100%", justifyContent: "center" }}>
+                      <div style={{ fontSize: 22, opacity: 0.3 }}>+</div>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)" }}>Add Track</div>
+                      <input type="file" accept="audio/*" onChange={e => { if (e.target.files[0]) addTrack(e.target.files[0]); e.target.value = ""; }} style={{ display: "none" }} />
+                    </label>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* START button */}
+        <button onClick={startGame} style={{ animation: "fadeSlideUp 0.7s ease 1.1s both, lobbyPulse 2.5s ease-in-out 2s infinite", marginTop: 36, background: "linear-gradient(135deg, rgba(74,222,128,0.15), rgba(96,165,250,0.15))", border: "1px solid rgba(74,222,128,0.3)", borderRadius: 16, padding: "16px 56px", color: "#4ade80", fontSize: 20, fontWeight: 800, cursor: "pointer", letterSpacing: 4 }}
+          onMouseEnter={e => { e.target.style.background = "linear-gradient(135deg, rgba(74,222,128,0.3), rgba(96,165,250,0.3))"; e.target.style.borderColor = "rgba(74,222,128,0.6)"; }}
+          onMouseLeave={e => { e.target.style.background = "linear-gradient(135deg, rgba(74,222,128,0.15), rgba(96,165,250,0.15))"; e.target.style.borderColor = "rgba(74,222,128,0.3)"; }}
+        >START</button>
+        <div style={{ animation: "fadeSlideUp 0.7s ease 1.3s both", fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 12 }}>Tracks are optional — you can drive without music</div>
       </div>}
-      <div style={{ position: "absolute", bottom: 12, left: 16, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(12px)", borderRadius: 12, padding: "8px 14px", color: "#fff", display: "flex", alignItems: "center", gap: 10, maxWidth: 260, border: "1px solid rgba(255,255,255,0.06)" }}>
-        <label style={{ cursor: "pointer", background: "rgba(255,255,255,0.07)", borderRadius: 8, padding: "5px 10px", fontSize: 11, whiteSpace: "nowrap", border: "1px solid rgba(255,255,255,0.08)" }}>🎵<input type="file" accept="audio/*" onChange={handleFile} style={{ display: "none" }} /></label>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {audioName ? <div style={{ display: "flex", alignItems: "center", gap: 6 }}><button onClick={togglePlay} style={{ background: "none", border: "none", color: "#fff", fontSize: 16, cursor: "pointer", padding: 0 }}>{isPlaying ? "⏸" : "▶️"}</button><div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11 }}>{audioName}</div></div> : <div style={{ fontSize: 10, opacity: 0.35 }}>Upload a track 🎧</div>}
+
+      {/* ===== IN-GAME HUD ===== */}
+      {!inLobby && <>
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: flash === "record" ? "rgba(255,215,0,0.25)" : flash === "boom" ? "rgba(255,0,0,0.35)" : "transparent", opacity: flash ? 1 : 0, transition: "opacity 0.3s ease-out" }} />
+        <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 16, alignItems: "center" }}>
+          <div style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", borderRadius: 12, padding: "8px 18px", color: "#fff", border: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
+            <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: 2 }}>SCORE</div>
+            <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "monospace", color: "#ffdd00" }}>{score}</div>
+          </div>
+          {highScore > 0 && <div style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", borderRadius: 12, padding: "8px 14px", color: "#fff", border: "1px solid rgba(255,215,0,0.15)", textAlign: "center" }}>
+            <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: 2 }}>HIGH</div>
+            <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace", color: "#ff8800" }}>{highScore}</div>
+          </div>}
         </div>
-      </div>
-      <div style={{ position: "absolute", top: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
-        <div style={{ background: "rgba(0,0,0,0.78)", backdropFilter: "blur(12px)", borderRadius: 14, padding: "12px 18px", color: "#fff", textAlign: "center", border: "1px solid rgba(255,255,255,0.05)", minWidth: 90 }}>
-          <div style={{ fontSize: 32, fontWeight: 700, fontFamily: "monospace", color: currentSpeed > 80 ? "#ff6b6b" : "#4ade80" }}>{currentSpeed}</div>
-          <div style={{ fontSize: 10, opacity: 0.35, letterSpacing: 2 }}>MPH</div>
+
+        {/* Death screen */}
+        {!alive && <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
+          <div style={{ fontSize: 56, fontWeight: 900, color: "#ff3333", textShadow: "0 0 30px rgba(255,0,0,0.5)", letterSpacing: 4 }}>SIGNED</div>
+          <div style={{ fontSize: 16, color: "#fff", marginTop: 6, opacity: 0.5 }}>The label got you...</div>
+          <div style={{ fontSize: 20, color: "#fff", marginTop: 12, opacity: 0.8 }}>Score: <span style={{ color: "#ffdd00", fontWeight: 700 }}>{score}</span></div>
+          {score >= highScore && score > 0 && <div style={{ fontSize: 16, color: "#ff8800", marginTop: 6 }}>NEW HIGH SCORE!</div>}
+          <button onClick={restart} style={{ marginTop: 24, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 12, padding: "12px 32px", color: "#fff", fontSize: 18, fontWeight: 700, cursor: "pointer", letterSpacing: 2 }} onMouseEnter={e => e.target.style.background = "rgba(255,255,255,0.25)"} onMouseLeave={e => e.target.style.background = "rgba(255,255,255,0.12)"}>RESTART</button>
+        </div>}
+
+        {/* Bottom-left: playlist controls */}
+        {tracks.length > 0 && <div style={{ position: "absolute", bottom: 12, left: 16, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(12px)", borderRadius: 12, padding: "8px 14px", color: "#fff", display: "flex", alignItems: "center", gap: 8, maxWidth: 280, border: "1px solid rgba(255,255,255,0.06)" }}>
+          {tracks.length > 1 && <button onClick={prevTrack} style={{ background: "none", border: "none", color: "#fff", fontSize: 14, cursor: "pointer", padding: "0 2px", opacity: 0.6 }}>⏮</button>}
+          <button onClick={togglePlay} style={{ background: "none", border: "none", color: "#fff", fontSize: 18, cursor: "pointer", padding: 0 }}>{isPlaying ? "⏸" : "▶"}</button>
+          {tracks.length > 1 && <button onClick={nextTrack} style={{ background: "none", border: "none", color: "#fff", fontSize: 14, cursor: "pointer", padding: "0 2px", opacity: 0.6 }}>⏭</button>}
+          <div style={{ flex: 1, minWidth: 0, marginLeft: 4 }}>
+            <div style={{ fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{curName}</div>
+            <div style={{ fontSize: 9, opacity: 0.35 }}>Track {trackIdx + 1} of {tracks.length}</div>
+          </div>
+        </div>}
+
+        {/* Top-right: speed + settings */}
+        <div style={{ position: "absolute", top: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+          <div style={{ background: "rgba(0,0,0,0.78)", backdropFilter: "blur(12px)", borderRadius: 14, padding: "12px 18px", color: "#fff", textAlign: "center", border: "1px solid rgba(255,255,255,0.05)", minWidth: 90 }}>
+            <div style={{ fontSize: 32, fontWeight: 700, fontFamily: "monospace", color: currentSpeed > 80 ? "#ff6b6b" : "#4ade80" }}>{currentSpeed}</div>
+            <div style={{ fontSize: 10, opacity: 0.35, letterSpacing: 2 }}>MPH</div>
+          </div>
+          <div style={{ background: "rgba(0,0,0,0.68)", backdropFilter: "blur(12px)", borderRadius: 10, padding: "6px 8px", color: "#fff", display: "flex", gap: 4, border: "1px solid rgba(255,255,255,0.05)" }}>
+            {[{ k: "day", i: "☀️" }, { k: "sunset", i: "🌅" }, { k: "night", i: "🌙" }, { k: "retro", i: "🌆" }].map(({ k, i }) => (<button key={k} onClick={() => setTimeOfDay(k)} style={{ background: timeOfDay === k ? "rgba(255,255,255,0.12)" : "transparent", border: "none", borderRadius: 8, padding: "4px 10px", color: "#fff", fontSize: 16, cursor: "pointer" }}>{i}</button>))}
+          </div>
+          <div style={{ background: "rgba(0,0,0,0.68)", backdropFilter: "blur(12px)", borderRadius: 10, padding: "6px 8px", color: "#fff", display: "flex", gap: 4, border: "1px solid rgba(255,255,255,0.05)" }}>
+            {[{ k: "forest", i: "🌲", l: "Forest" }, { k: "sakura", i: "🌸", l: "Sakura" }, { k: "city", i: "🏙️", l: "City" }].map(({ k, i, l }) => (<button key={k} onClick={() => setSceneryTheme(k)} style={{ background: sceneryTheme === k ? "rgba(255,255,255,0.12)" : "transparent", border: "none", borderRadius: 8, padding: "4px 10px", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><span style={{ fontSize: 16 }}>{i}</span>{l}</button>))}
+          </div>
         </div>
-        <div style={{ background: "rgba(0,0,0,0.68)", backdropFilter: "blur(12px)", borderRadius: 10, padding: "6px 8px", color: "#fff", display: "flex", gap: 4, border: "1px solid rgba(255,255,255,0.05)" }}>
-          {[{ k: "day", i: "☀️" }, { k: "sunset", i: "🌅" }, { k: "night", i: "🌙" }, { k: "retro", i: "🌆" }].map(({ k, i }) => (<button key={k} onClick={() => setTimeOfDay(k)} style={{ background: timeOfDay === k ? "rgba(255,255,255,0.12)" : "transparent", border: "none", borderRadius: 8, padding: "4px 10px", color: "#fff", fontSize: 16, cursor: "pointer" }}>{i}</button>))}
+
+        {/* Bottom-right: controls help */}
+        <div style={{ position: "absolute", bottom: 12, right: 16, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(12px)", borderRadius: 10, padding: "8px 12px", color: "#fff", border: "1px solid rgba(255,255,255,0.04)" }}>
+          <div style={{ fontSize: 11, opacity: 0.4, lineHeight: 1.6 }}>
+            <span style={{ color: "#4ade80" }}>SHIFT</span> go · <span style={{ color: "#fbbf24" }}>SPACE</span> brake · <span style={{ color: "#60a5fa" }}>A/D</span> steer
+          </div>
         </div>
-        <div style={{ background: "rgba(0,0,0,0.68)", backdropFilter: "blur(12px)", borderRadius: 10, padding: "6px 8px", color: "#fff", display: "flex", gap: 4, border: "1px solid rgba(255,255,255,0.05)" }}>
-          {[{ k: "forest", i: "🌲", l: "Forest" }, { k: "sakura", i: "🌸", l: "Sakura" }, { k: "city", i: "🏙️", l: "City" }].map(({ k, i, l }) => (<button key={k} onClick={() => setSceneryTheme(k)} style={{ background: sceneryTheme === k ? "rgba(255,255,255,0.12)" : "transparent", border: "none", borderRadius: 8, padding: "4px 10px", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><span style={{ fontSize: 16 }}>{i}</span>{l}</button>))}
-        </div>
-      </div>
-      <div style={{ position: "absolute", bottom: 56, left: 16, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(12px)", borderRadius: 12, padding: "10px 16px", color: "#fff", border: "1px solid rgba(255,255,255,0.05)" }}>
-        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: 1 }}>CAR LISTEN 🎧</div>
-        <div style={{ fontSize: 11, opacity: 0.45, marginTop: 4, lineHeight: 1.6 }}>
-          <span style={{ color: "#4ade80" }}>SHIFT</span> accelerate · <span style={{ color: "#fbbf24" }}>SPACE</span> brake<br />
-          <span style={{ color: "#60a5fa" }}>A/D</span> or <span style={{ color: "#60a5fa" }}>←/→</span> steer<br />
-          <span style={{ color: "#ffdd00" }}>💿</span> collect records · <span style={{ color: "#ff4444" }}>🏢</span> dodge labels
-        </div>
-      </div>
+      </>}
     </div>
   );
 }
