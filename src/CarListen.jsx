@@ -37,63 +37,144 @@ export default function CarListen() {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const rate = ctx.sampleRate;
 
-    // Cabin impulse response (short reverb for small enclosed space)
-    const len = Math.floor(rate * 0.35);
-    const impulse = ctx.createBuffer(2, len, rate);
+    // === CAR CABIN IMPULSE RESPONSE ===
+    // Modeled on a compact sedan: windshield ~0.4ms, dashboard ~0.8ms,
+    // roof liner ~1.2ms, rear glass ~2.5ms, door panels ~1.8ms, plus diffuse tail
+    const irLen = Math.floor(rate * 0.25); // 250ms — tight cabin decay
+    const impulse = ctx.createBuffer(2, irLen, rate);
+    // Early reflection times (seconds) and gains for each surface
+    const reflections = [
+      { t: 0.0004, g: 0.35, spread: 0.2 },   // windshield (close, strong)
+      { t: 0.0008, g: 0.25, spread: 0.4 },   // dashboard bounce
+      { t: 0.0012, g: 0.20, spread: 0.6 },   // roof headliner
+      { t: 0.0018, g: 0.15, spread: 0.8 },   // door panels (L/R differ)
+      { t: 0.0025, g: 0.12, spread: 1.0 },   // rear glass
+      { t: 0.004, g: 0.08, spread: 1.0 },    // rear shelf
+      { t: 0.006, g: 0.05, spread: 1.0 },    // second-order reflections
+    ];
     for (let ch = 0; ch < 2; ch++) {
       const d = impulse.getChannelData(ch);
-      for (let i = 0; i < len; i++) { const t = i / rate; d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 12) * (i < rate * 0.02 ? 0.6 : 1) * 0.4; }
+      // Plant early reflections as short filtered noise bursts
+      for (const ref of reflections) {
+        const startSamp = Math.floor(ref.t * rate);
+        const burstLen = Math.floor(rate * 0.0008); // 0.8ms burst width
+        for (let i = 0; i < burstLen && (startSamp + i) < irLen; i++) {
+          const env = Math.exp(-i / (burstLen * 0.3)); // fast decay per burst
+          const stereoVar = ch === 0 ? 1.0 : (1.0 - ref.spread * 0.15); // slight L/R difference
+          d[startSamp + i] += (Math.random() * 2 - 1) * ref.g * env * stereoVar;
+        }
+      }
+      // Diffuse tail — exponential decay with cabin-colored spectrum
+      for (let i = 0; i < irLen; i++) {
+        const t = i / rate;
+        // Dual-decay: fast initial (hard surfaces) + slower tail (soft trim)
+        const env = Math.exp(-t * 22) * 0.15 + Math.exp(-t * 8) * 0.06;
+        d[i] += (Math.random() * 2 - 1) * env;
+      }
     }
     const convolver = ctx.createConvolver(); convolver.buffer = impulse;
 
-    // Music chain: bass boost → cabin LPF → stereo panners with delay → dry mix
-    const bassBoost = ctx.createBiquadFilter(); bassBoost.type = "peaking"; bassBoost.frequency.value = 80; bassBoost.gain.value = 6; bassBoost.Q.value = 1.2;
-    const cabinLPF = ctx.createBiquadFilter(); cabinLPF.type = "lowpass"; cabinLPF.frequency.value = 8000; cabinLPF.Q.value = 0.7;
-    // Speaker distance delays (L speaker slightly closer = ~0.3ms, R speaker ~0.6ms from driver)
-    const delayL = ctx.createDelay(0.01); delayL.delayTime.value = 0.0003;
-    const delayR = ctx.createDelay(0.01); delayR.delayTime.value = 0.0006;
-    const panL = ctx.createStereoPanner(); panL.pan.value = -0.6;
-    const panR = ctx.createStereoPanner(); panR.pan.value = 0.6;
-    const dryGain = ctx.createGain(); dryGain.gain.value = 0.7;
-    const wetGain = ctx.createGain(); wetGain.gain.value = 0.35;
+    // === MUSIC SIGNAL CHAIN ===
+    // Cabin EQ: models speaker + room coloration
+    // 1) Sub-bass shelf: trunk/floor resonance
+    const subBass = ctx.createBiquadFilter(); subBass.type = "lowshelf"; subBass.frequency.value = 60; subBass.gain.value = 4;
+    // 2) Cabin resonance: mid-bass room mode (~250Hz in small sedan)
+    const cabinRes = ctx.createBiquadFilter(); cabinRes.type = "peaking"; cabinRes.frequency.value = 250; cabinRes.gain.value = 3; cabinRes.Q.value = 1.8;
+    // 3) Door speaker warmth: gentle boost
+    const bassBoost = ctx.createBiquadFilter(); bassBoost.type = "peaking"; bassBoost.frequency.value = 90; bassBoost.gain.value = 4.5; bassBoost.Q.value = 0.8;
+    // 4) Dashboard reflection presence
+    const presence = ctx.createBiquadFilter(); presence.type = "peaking"; presence.frequency.value = 3200; presence.gain.value = 1.5; presence.Q.value = 1.0;
+    // 5) Cabin high-frequency rolloff (glass/upholstery absorption)
+    const cabinLPF = ctx.createBiquadFilter(); cabinLPF.type = "lowpass"; cabinLPF.frequency.value = 13000; cabinLPF.Q.value = 0.5;
+    // 6) Subtle high-shelf dip (air absorption in enclosed space)
+    const airAbs = ctx.createBiquadFilter(); airAbs.type = "highshelf"; airAbs.frequency.value = 8000; airAbs.gain.value = -2;
+
+    // Speaker distance delays — driver sits left, so L speaker ~0.5ms, R speaker ~1.4ms
+    const delayL = ctx.createDelay(0.05); delayL.delayTime.value = 0.0005;
+    const delayR = ctx.createDelay(0.05); delayR.delayTime.value = 0.0014;
+    // Center image path — phantom center from both speakers at ~0.9ms
+    const delayC = ctx.createDelay(0.05); delayC.delayTime.value = 0.0009;
+    // Rear reflection path — bounces off rear glass ~3ms later, filtered + quiet
+    const delayRear = ctx.createDelay(0.05); delayRear.delayTime.value = 0.003;
+    const rearLPF = ctx.createBiquadFilter(); rearLPF.type = "lowpass"; rearLPF.frequency.value = 4000; rearLPF.Q.value = 0.4;
+    const rearGain = ctx.createGain(); rearGain.gain.value = 0.12;
+
+    // Stereo panners — wider spread for real car imaging
+    const panL = ctx.createStereoPanner(); panL.pan.value = -0.7;
+    const panR = ctx.createStereoPanner(); panR.pan.value = 0.7;
+
+    // Gains
+    const dryGain = ctx.createGain(); dryGain.gain.value = 0.72;
+    const wetGain = ctx.createGain(); wetGain.gain.value = 0.2; // subtle room color, not washy
     const masterGain = ctx.createGain(); masterGain.gain.value = 1.0;
-    // Permanent downstream chain
-    bassBoost.connect(cabinLPF);
-    cabinLPF.connect(delayL).connect(panL).connect(dryGain);
-    cabinLPF.connect(delayR).connect(panR).connect(dryGain);
-    dryGain.connect(masterGain);
-    convolver.connect(wetGain); wetGain.connect(masterGain);
+
+    // Compressor — models car amplifier limiting + keeps level above road noise
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.value = -18;  // engage fairly early
+    compressor.knee.value = 12;        // soft knee for musical compression
+    compressor.ratio.value = 4;        // moderate ratio
+    compressor.attack.value = 0.003;   // fast attack (3ms)
+    compressor.release.value = 0.15;   // medium release
+
+    // Wire the EQ chain
+    bassBoost.connect(subBass).connect(cabinRes).connect(presence).connect(cabinLPF).connect(airAbs);
+    // Split to L/R/Center/Rear speaker paths
+    airAbs.connect(delayL).connect(panL).connect(dryGain);
+    airAbs.connect(delayR).connect(panR).connect(dryGain);
+    airAbs.connect(delayC).connect(dryGain); // center image (no pan)
+    airAbs.connect(delayRear).connect(rearLPF).connect(rearGain).connect(dryGain); // rear bounce
+    dryGain.connect(compressor);
+    convolver.connect(wetGain); wetGain.connect(compressor);
+    compressor.connect(masterGain);
     masterGain.connect(ctx.destination);
 
-    // === ROAD NOISE (low rumble, tire texture) ===
-    const noiseNode = ctx.createBufferSource();
-    const noiseBuf = ctx.createBuffer(1, Math.floor(rate * 2), rate);
-    const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
-    noiseNode.buffer = noiseBuf; noiseNode.loop = true;
-    const noiseLPF = ctx.createBiquadFilter(); noiseLPF.type = "lowpass"; noiseLPF.frequency.value = 250; noiseLPF.Q.value = 0.5;
-    const noiseGain = ctx.createGain(); noiseGain.gain.value = 0;
-    noiseNode.connect(noiseLPF).connect(noiseGain).connect(ctx.destination); noiseNode.start();
+    // === ROAD NOISE — layered tire rumble + mid-freq road roar ===
+    // Layer 1: low-end tire rumble (brownian-ish noise for smoother bass)
+    const roadRumble = ctx.createBufferSource();
+    const rumbleBuf = ctx.createBuffer(1, Math.floor(rate * 3), rate);
+    const rd = rumbleBuf.getChannelData(0);
+    let lastVal = 0;
+    for (let i = 0; i < rd.length; i++) { lastVal = lastVal * 0.97 + (Math.random() * 2 - 1) * 0.03; rd[i] = lastVal; }
+    roadRumble.buffer = rumbleBuf; roadRumble.loop = true;
+    const rumbleLPF = ctx.createBiquadFilter(); rumbleLPF.type = "lowpass"; rumbleLPF.frequency.value = 180; rumbleLPF.Q.value = 0.6;
+    const rumbleGain = ctx.createGain(); rumbleGain.gain.value = 0;
+    roadRumble.connect(rumbleLPF).connect(rumbleGain).connect(ctx.destination); roadRumble.start();
+    // Layer 2: mid-freq road texture (pavement hiss/roar around 400-1200Hz)
+    const roadTex = ctx.createBufferSource();
+    const texBuf = ctx.createBuffer(1, Math.floor(rate * 3), rate);
+    const td = texBuf.getChannelData(0); for (let i = 0; i < td.length; i++) td[i] = Math.random() * 2 - 1;
+    roadTex.buffer = texBuf; roadTex.loop = true;
+    const texBPF = ctx.createBiquadFilter(); texBPF.type = "bandpass"; texBPF.frequency.value = 700; texBPF.Q.value = 0.8;
+    const texGain = ctx.createGain(); texGain.gain.value = 0;
+    roadTex.connect(texBPF).connect(texGain).connect(ctx.destination); roadTex.start();
 
-    // === ENGINE DRONE (oscillator-based, pitches up with speed) ===
+    // === ENGINE DRONE — richer with sub-harmonic + 3rd overtone ===
     const engOsc1 = ctx.createOscillator(); engOsc1.type = "sawtooth"; engOsc1.frequency.value = 35;
     const engOsc2 = ctx.createOscillator(); engOsc2.type = "triangle"; engOsc2.frequency.value = 70;
-    const engLPF = ctx.createBiquadFilter(); engLPF.type = "lowpass"; engLPF.frequency.value = 120; engLPF.Q.value = 1.5;
+    const engOsc3 = ctx.createOscillator(); engOsc3.type = "sine"; engOsc3.frequency.value = 17.5; // sub-harmonic rumble
+    const engLPF = ctx.createBiquadFilter(); engLPF.type = "lowpass"; engLPF.frequency.value = 120; engLPF.Q.value = 1.2;
     const engGain = ctx.createGain(); engGain.gain.value = 0;
-    engOsc1.connect(engLPF); engOsc2.connect(engLPF);
+    engOsc1.connect(engLPF); engOsc2.connect(engLPF); engOsc3.connect(engLPF);
     engLPF.connect(engGain).connect(ctx.destination);
-    engOsc1.start(); engOsc2.start();
+    engOsc1.start(); engOsc2.start(); engOsc3.start();
 
-    // === WIND NOISE (high-freq hiss, increases with speed) ===
+    // === WIND NOISE — wider band with speed-dependent filter sweep ===
     const windNode = ctx.createBufferSource();
-    const windBuf = ctx.createBuffer(1, Math.floor(rate * 2), rate);
+    const windBuf = ctx.createBuffer(1, Math.floor(rate * 3), rate);
     const wd = windBuf.getChannelData(0); for (let i = 0; i < wd.length; i++) wd[i] = Math.random() * 2 - 1;
     windNode.buffer = windBuf; windNode.loop = true;
-    const windHPF = ctx.createBiquadFilter(); windHPF.type = "highpass"; windHPF.frequency.value = 2500; windHPF.Q.value = 0.3;
-    const windLPF = ctx.createBiquadFilter(); windLPF.type = "lowpass"; windLPF.frequency.value = 6000; windLPF.Q.value = 0.5;
+    const windHPF = ctx.createBiquadFilter(); windHPF.type = "highpass"; windHPF.frequency.value = 1800; windHPF.Q.value = 0.4;
+    const windLPF = ctx.createBiquadFilter(); windLPF.type = "lowpass"; windLPF.frequency.value = 7000; windLPF.Q.value = 0.5;
+    // Subtle wind resonance peak from door seal gaps
+    const windRes = ctx.createBiquadFilter(); windRes.type = "peaking"; windRes.frequency.value = 3500; windRes.gain.value = 3; windRes.Q.value = 2.0;
     const windGain = ctx.createGain(); windGain.gain.value = 0;
-    windNode.connect(windHPF).connect(windLPF).connect(windGain).connect(ctx.destination); windNode.start();
+    windNode.connect(windHPF).connect(windRes).connect(windLPF).connect(windGain).connect(ctx.destination); windNode.start();
 
-    audioCtxRef.current = { ctx, convolver, bassBoost, noiseGain, engOsc1, engOsc2, engLPF, engGain, windGain, activeSource: null };
+    audioCtxRef.current = {
+      ctx, convolver, bassBoost, cabinRes, presence, cabinLPF, subBass, airAbs, compressor,
+      rumbleGain, texGain, engOsc1, engOsc2, engOsc3, engLPF, engGain,
+      windGain, windHPF, windLPF, windRes, activeSource: null
+    };
     return audioCtxRef.current;
   };
 
@@ -796,17 +877,25 @@ export default function CarListen() {
         const ac = audioCtxRef.current;
         const sf = Math.min(car.speed / 120, 1); // speed fraction 0-1
         const smooth = 1 - Math.exp(-5 * dt);
-        // Road noise: tire rumble increases with speed
-        ac.noiseGain.gain.value += (sf * 0.05 - ac.noiseGain.gain.value) * smooth;
-        // Engine drone: pitch sweeps 35→115Hz, volume ramps up, LPF opens with speed
-        const engFreq = 35 + sf * 80;
+        // Road noise: 2-layer — low rumble ramps first, mid texture joins at higher speed
+        ac.rumbleGain.gain.value += (sf * 0.06 - ac.rumbleGain.gain.value) * smooth;
+        const texVol = Math.max(0, (sf - 0.15) / 0.85) * 0.025; // mid roar starts at ~18mph
+        ac.texGain.gain.value += (texVol - ac.texGain.gain.value) * smooth;
+        // Engine: 3 oscillators — fundamental sweeps 30→110Hz, sub-harmonic tracks half, overtone at 2x
+        const engFreq = 30 + sf * 80;
         ac.engOsc1.frequency.value += (engFreq - ac.engOsc1.frequency.value) * smooth;
         ac.engOsc2.frequency.value += (engFreq * 2 - ac.engOsc2.frequency.value) * smooth;
-        ac.engGain.gain.value += ((0.012 + sf * 0.035) - ac.engGain.gain.value) * smooth;
-        ac.engLPF.frequency.value += ((80 + sf * 200) - ac.engLPF.frequency.value) * smooth;
-        // Wind noise: silent until ~30mph, ramps up above that
-        const windVol = Math.max(0, (sf - 0.25) / 0.75) * 0.04;
+        ac.engOsc3.frequency.value += (engFreq * 0.5 - ac.engOsc3.frequency.value) * smooth;
+        ac.engGain.gain.value += ((0.01 + sf * 0.03) - ac.engGain.gain.value) * smooth;
+        ac.engLPF.frequency.value += ((80 + sf * 250) - ac.engLPF.frequency.value) * smooth;
+        // Wind: wider band that sweeps higher with speed (door seals whine more)
+        const windVol = Math.max(0, (sf - 0.2) / 0.8) * 0.035;
         ac.windGain.gain.value += (windVol - ac.windGain.gain.value) * smooth;
+        // Wind filter sweep — HPF lowers + LPF opens at speed for broader hiss
+        ac.windHPF.frequency.value += ((2200 - sf * 600) - ac.windHPF.frequency.value) * smooth;
+        ac.windLPF.frequency.value += ((5000 + sf * 4000) - ac.windLPF.frequency.value) * smooth;
+        // Door seal resonance gets louder at high speed
+        ac.windRes.gain.value += ((2 + sf * 5) - ac.windRes.gain.value) * smooth;
       }
 
       // === SPEED-DEPENDENT VISUAL EFFECTS ===
