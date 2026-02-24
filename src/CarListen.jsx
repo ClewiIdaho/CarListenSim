@@ -235,16 +235,27 @@ export default function CarListen() {
 
   const mkLabel = () => {
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.6, 0.3), new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.3, metalness: 0.2 }));
+    // Body — lighter base with emissive edge glow so it's always visible
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.25, metalness: 0.3, emissive: 0xff2200, emissiveIntensity: 0.15 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.6, 0.3), bodyMat);
     body.position.y = 0.8; g.add(body);
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.02), new THREE.MeshStandardMaterial({ color: 0xcc9900, roughness: 0.15, metalness: 0.85 }));
+    // Gold plate
+    const plateMat = new THREE.MeshStandardMaterial({ color: 0xddaa00, roughness: 0.1, metalness: 0.9, emissive: 0xffaa00, emissiveIntensity: 0.3 });
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.02), plateMat);
     plate.position.set(0, 0.9, 0.17); g.add(plate);
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.15, 0.32), new THREE.MeshStandardMaterial({ color: 0xcc0000, roughness: 0.4, metalness: 0.1 }));
+    // Red stripe — bright emissive band
+    const stripeMat = new THREE.MeshStandardMaterial({ color: 0xff2200, roughness: 0.3, metalness: 0.1, emissive: 0xff0000, emissiveIntensity: 0.6 });
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.15, 0.32), stripeMat);
     stripe.position.set(0, 1.65, 0); g.add(stripe);
-    [-0.7, 0.7].forEach(sx => { for (let i = 0; i < 3; i++) { const lk = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.02, 6, 8), new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.15, metalness: 0.9 })); lk.position.set(sx, 0.4 + i * 0.25, 0); lk.rotation.y = Math.PI / 2; lk.rotation.x = i % 2 === 0 ? 0 : Math.PI / 2; g.add(lk); } });
-    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 1.0 }));
+    // Chrome bolts
+    [-0.7, 0.7].forEach(sx => { for (let i = 0; i < 3; i++) { const lk = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.02, 6, 8), new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.1, metalness: 0.95 })); lk.position.set(sx, 0.4 + i * 0.25, 0); lk.rotation.y = Math.PI / 2; lk.rotation.x = i % 2 === 0 ? 0 : Math.PI / 2; g.add(lk); } });
+    // Warning glow ring around base
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.06, 8, 24), new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.6 }));
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.05; g.add(ring);
+    // Top warning light — pulsing red beacon
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 2.0, transparent: true, opacity: 0.9 }));
     glow.position.set(0, 1.85, 0); g.add(glow);
-    g.userData = { type: "label", light: glow }; return g;
+    g.userData = { type: "label", light: glow, bodyMat, stripeMat, plateMat, ring }; return g;
   };
 
   const mkExplosion = () => { const g = new THREE.Group(); const cols = [0xff4400, 0xff8800, 0xffcc00, 0xff2200]; for (let i = 0; i < 12; i++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.5 + Math.random() * 1.5, 8, 6), new THREE.MeshBasicMaterial({ color: cols[i % 4], transparent: true, opacity: 0.8 })); b.position.set((Math.random() - .5) * 3, Math.random() * 3, (Math.random() - .5) * 3 - 3); b.userData.speed = 1 + Math.random() * 2; g.add(b); } for (let i = 0; i < 6; i++) { const sm = new THREE.Mesh(new THREE.SphereGeometry(1 + Math.random(), 6, 5), new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.5 })); sm.position.set((Math.random() - .5) * 4, 1 + Math.random() * 2, (Math.random() - .5) * 4 - 3); g.add(sm); } g.visible = false; return g; };
@@ -320,10 +331,10 @@ export default function CarListen() {
     composer.addPass(new OutputPass());
 
     // === SKY: gradient hemisphere shader ===
-    const skyC = { day: 0x87CEEB, sunset: 0xFF6B35, night: 0x0a0a2e, retro: 0x1a0033 };
-    const fogC = { day: 0xc8e6f5, sunset: 0xff8855, night: 0x050520, retro: 0x220044 };
-    const ambC = { day: 0x8899aa, sunset: 0x553322, night: 0x111133, retro: 0x660088 };
-    const dirC = { day: 0xfffff0, sunset: 0xff7733, night: 0x223355, retro: 0xff00ff };
+    const skyC = { day: 0x87CEEB, sunset: 0xFF6B35, night: 0x081428, retro: 0x200040 };
+    const fogC = { day: 0xc8e6f5, sunset: 0xff8855, night: 0x060e1e, retro: 0x180030 };
+    const ambC = { day: 0x8899aa, sunset: 0x553322, night: 0x1a2244, retro: 0x8800cc };
+    const dirC = { day: 0xfffff0, sunset: 0xff7733, night: 0x3355aa, retro: 0xff44ff };
     const skyGeo = new THREE.SphereGeometry(900, 32, 16);
     const skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false,
@@ -430,18 +441,44 @@ export default function CarListen() {
     const gndMat = new THREE.MeshStandardMaterial({ map: gndTex, roughness: 0.95, metalness: 0 });
     const gnd = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), gndMat); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; roadGroup.add(gnd);
 
-    // Retro
-    const retroSun = new THREE.Mesh(new THREE.CircleGeometry(60, 32), new THREE.ShaderMaterial({ vertexShader: `varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`, fragmentShader: `varying vec2 vUv;void main(){float y=vUv.y;vec3 c=mix(vec3(1.,0.,0.5),vec3(1.,0.9,0.),y);float l=step(0.5,fract(y*12.));float m=y<0.5?mix(1.,l,1.-y*2.):1.;gl_FragColor=vec4(c*m,m>0.01?1.:0.);}`, transparent: true, side: THREE.DoubleSide }));
-    retroSun.position.set(0, 40, -800); retroSun.visible = false; scene.add(retroSun);
-    const retroGrid = new THREE.Mesh(new THREE.PlaneGeometry(800, 800, 40, 40), new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true, transparent: true, opacity: 0.25 }));
-    retroGrid.rotation.x = -Math.PI / 2; retroGrid.position.set(0, 0.05, -350); retroGrid.visible = false; scene.add(retroGrid);
+    // Retro sun — proper synthwave gradient with horizontal gap lines
+    const retroSun = new THREE.Mesh(new THREE.CircleGeometry(80, 48), new THREE.ShaderMaterial({
+      vertexShader: `varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+      fragmentShader: `varying vec2 vUv;void main(){
+        float y=vUv.y; vec2 c2=vUv-0.5; float r=length(c2);
+        if(r>0.5) discard;
+        // Hot gradient: magenta bottom → orange mid → yellow top
+        vec3 c=y<0.4 ? mix(vec3(0.8,0.0,0.6),vec3(1.0,0.3,0.1),y/0.4)
+                      : mix(vec3(1.0,0.3,0.1),vec3(1.0,0.95,0.3),(y-0.4)/0.6);
+        // Horizontal scanline gaps that widen toward bottom
+        float gapWidth=mix(0.06,0.005,y);
+        float stripe=smoothstep(0.48,0.5,fract(y*10.0))*smoothstep(0.48+gapWidth,0.48,fract(y*10.0));
+        float mask=y<0.5 ? 1.0-stripe : 1.0;
+        // Soft edge glow
+        float edge=1.0-smoothstep(0.42,0.5,r);
+        vec3 glow=vec3(1.0,0.2,0.6)*pow(1.0-smoothstep(0.35,0.52,r),2.0)*0.4;
+        gl_FragColor=vec4((c*mask+glow)*edge,edge*mask>0.01?edge:0.0);
+      }`, transparent: true, side: THREE.DoubleSide, depthWrite: false
+    }));
+    retroSun.position.set(0, 35, -700); retroSun.visible = false; scene.add(retroSun);
+    // Retro grid — denser, brighter neon
+    const retroGrid = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200, 60, 60), new THREE.MeshBasicMaterial({ color: 0xff44ff, wireframe: true, transparent: true, opacity: 0.35 }));
+    retroGrid.rotation.x = -Math.PI / 2; retroGrid.position.set(0, 0.05, -500); retroGrid.visible = false; scene.add(retroGrid);
 
     // === STARS ===
     const starGeo = new THREE.BufferGeometry();
-    const starArr = new Float32Array(500 * 3);
-    for (let i = 0; i < 500; i++) { starArr[i * 3] = (Math.random() - 0.5) * 1200; starArr[i * 3 + 1] = 30 + Math.random() * 200; starArr[i * 3 + 2] = -100 - Math.random() * 800; }
+    const starCount = 900;
+    const starArr = new Float32Array(starCount * 3);
+    const starSizes = new Float32Array(starCount);
+    for (let i = 0; i < starCount; i++) {
+      starArr[i * 3] = (Math.random() - 0.5) * 1600;
+      starArr[i * 3 + 1] = 20 + Math.random() * 250;
+      starArr[i * 3 + 2] = -50 - Math.random() * 900;
+      starSizes[i] = 0.4 + Math.random() * 1.2; // varied sizes for depth
+    }
     starGeo.setAttribute("position", new THREE.BufferAttribute(starArr, 3));
-    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.8, transparent: true, opacity: 0.8 });
+    starGeo.setAttribute("size", new THREE.BufferAttribute(starSizes, 1));
+    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.0, transparent: true, opacity: 0.9, sizeAttenuation: true });
     const stars = new THREE.Points(starGeo, starMat); stars.visible = false; scene.add(stars);
 
     // === CLOUDS ===
@@ -498,10 +535,10 @@ export default function CarListen() {
     // === HEADLIGHT CONES (volumetric light on road) ===
     const hlConeMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, side: THREE.DoubleSide,
-      uniforms: { intensity: { value: 0 } },
+      uniforms: { intensity: { value: 0 }, color: { value: new THREE.Vector3(1.0, 1.0, 0.85) } },
       vertexShader: `varying vec3 vPos; void main(){ vPos=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-      fragmentShader: `uniform float intensity; varying vec3 vPos;
-        void main(){ float d=length(vPos.xz)*0.03; float a=max(0.0,1.0-d)*0.12*intensity; float fade=1.0-smoothstep(0.0,40.0,abs(vPos.z)); gl_FragColor=vec4(1.0,1.0,0.85,a*fade); }`
+      fragmentShader: `uniform float intensity; uniform vec3 color; varying vec3 vPos;
+        void main(){ float d=length(vPos.xz)*0.03; float a=max(0.0,1.0-d)*0.18*intensity; float fade=1.0-smoothstep(0.0,40.0,abs(vPos.z)); gl_FragColor=vec4(color,a*fade); }`
     });
     const hlConeL = new THREE.Mesh(new THREE.PlaneGeometry(8, 80), hlConeMat.clone());
     hlConeL.rotation.x = -Math.PI / 2; hlConeL.position.set(-1.5, 0.08, -42); scene.add(hlConeL);
@@ -796,11 +833,12 @@ export default function CarListen() {
       }
       // Chromatic aberration increases with speed
       if (s.chromaPass) s.chromaPass.uniforms.amount.value = 0.0003 + sf * 0.001;
-      // Bloom increases slightly at high speed
-      if (s.bloomPass) s.bloomPass.strength = 0.12 + sf * 0.12;
-      // Headlight cone intensity
-      if (s.hlConeL) s.hlConeL.material.uniforms.intensity.value = s.hlL.intensity > 0 ? 1 : 0;
-      if (s.hlConeR) s.hlConeR.material.uniforms.intensity.value = s.hlR.intensity > 0 ? 1 : 0;
+      // Bloom increases slightly at high speed — add to theme base
+      if (s.bloomPass) { const base = s.bloomPass._themeStrength || 0.15; s.bloomPass.strength = base + sf * 0.15; }
+      // Headlight cone intensity and color — brighter for night/retro
+      const hlMul = s.hlL.intensity > 0 ? (s.hlL.intensity > 2.5 ? 1.5 : 1.0) : 0;
+      if (s.hlConeL) { s.hlConeL.material.uniforms.intensity.value = hlMul; s.hlConeL.material.uniforms.color.value.set(s.hlL.color.r, s.hlL.color.g, s.hlL.color.b); }
+      if (s.hlConeR) { s.hlConeR.material.uniforms.intensity.value = hlMul; s.hlConeR.material.uniforms.color.value.set(s.hlR.color.r, s.hlR.color.g, s.hlR.color.b); }
 
       s.composer.render();
     };
@@ -812,19 +850,27 @@ export default function CarListen() {
 
   useEffect(() => {
     const s = sceneRef.current; if (!s.scene) return;
+    const isNight = timeOfDay === "night", isRetro = timeOfDay === "retro";
     s.scene.fog.color.set(s.fogC[timeOfDay]);
     s.amb.color.set(s.ambC[timeOfDay]); s.dir.color.set(s.dirC[timeOfDay]);
-    s.dir.intensity = { day: 1, sunset: 0.6, night: 0.2, retro: 0.4 }[timeOfDay];
-    s.amb.intensity = { day: 0.7, sunset: 0.5, night: 0.25, retro: 0.35 }[timeOfDay];
-    const on = timeOfDay !== "day"; s.hlL.intensity = on ? 2 : 0; s.hlR.intensity = on ? 2 : 0;
-    const hc = timeOfDay === "retro" ? 0xff00ff : 0xffffcc; s.hlL.color.set(hc); s.hlR.color.set(hc);
-    // Update sky shader colors per time of day
+    // Night: moonlit blue ambient, Retro: magenta wash
+    s.dir.intensity = { day: 1, sunset: 0.6, night: 0.3, retro: 0.5 }[timeOfDay];
+    s.amb.intensity = { day: 0.7, sunset: 0.5, night: 0.35, retro: 0.4 }[timeOfDay];
+    // Headlights
+    const on = timeOfDay !== "day";
+    s.hlL.intensity = on ? (isNight ? 3 : isRetro ? 2.5 : 2) : 0;
+    s.hlR.intensity = on ? (isNight ? 3 : isRetro ? 2.5 : 2) : 0;
+    const hc = isRetro ? 0xff44ff : isNight ? 0xddeeff : 0xffffcc;
+    s.hlL.color.set(hc); s.hlR.color.set(hc);
+    // Sky shader
     if (s.skyMat) {
       const skyConfigs = {
         day:    { top: 0x2266aa, mid: 0x87CEEB, bottom: 0xc8e6f5, sun: 0xfffff0, sunDir: [0.3, 0.5, -0.8], sunSize: 0.04 },
         sunset: { top: 0x1a1040, mid: 0xff6b35, bottom: 0xff8855, sun: 0xffdd44, sunDir: [0.0, 0.08, -1.0], sunSize: 0.08 },
-        night:  { top: 0x020818, mid: 0x0a0a2e, bottom: 0x0a1020, sun: 0x8888cc, sunDir: [0.5, -0.3, -0.8], sunSize: 0.01 },
-        retro:  { top: 0x0a0030, mid: 0x1a0033, bottom: 0x220044, sun: 0xff00ff, sunDir: [0.0, 0.2, -1.0], sunSize: 0.06 },
+        // Night: rich deep blue sky with visible moon
+        night:  { top: 0x030a1a, mid: 0x081428, bottom: 0x0c1a30, sun: 0xccddff, sunDir: [0.4, 0.35, -0.7], sunSize: 0.025 },
+        // Retro: deep purple to hot pink horizon haze
+        retro:  { top: 0x08001a, mid: 0x200040, bottom: 0x440055, sun: 0xff33cc, sunDir: [0.0, 0.15, -1.0], sunSize: 0.08 },
       };
       const sc = skyConfigs[timeOfDay];
       s.skyMat.uniforms.topColor.value.set(sc.top);
@@ -834,37 +880,82 @@ export default function CarListen() {
       s.skyMat.uniforms.sunDir.value.set(...sc.sunDir).normalize();
       s.skyMat.uniforms.sunSize.value = sc.sunSize;
     }
-    // Color grading per time of day
+    // Color grading
     if (s.colorPass) {
-      const cg = { day: { warmth: 0.02, contrast: 1.04 }, sunset: { warmth: 0.06, contrast: 1.06 }, night: { warmth: -0.02, contrast: 1.1 }, retro: { warmth: 0.01, contrast: 1.15 } };
+      const cg = {
+        day: { warmth: 0.02, contrast: 1.04 }, sunset: { warmth: 0.06, contrast: 1.06 },
+        night: { warmth: -0.04, contrast: 1.12 },  // cool blue tint, higher contrast
+        retro: { warmth: 0.03, contrast: 1.2 }      // warm neon, punchy contrast
+      };
       s.colorPass.uniforms.warmth.value = cg[timeOfDay].warmth;
       s.colorPass.uniforms.contrast.value = cg[timeOfDay].contrast;
     }
-    // Bloom per time of day
-    if (s.bloomPass) s.bloomPass.threshold = { day: 0.92, sunset: 0.85, night: 0.78, retro: 0.7 }[timeOfDay];
+    // Bloom — night catches headlights/moon, retro goes full neon glow
+    if (s.bloomPass) {
+      s.bloomPass.threshold = { day: 0.92, sunset: 0.85, night: 0.72, retro: 0.55 }[timeOfDay];
+      const bStr = { day: 0.15, sunset: 0.2, night: 0.3, retro: 0.6 }[timeOfDay];
+      s.bloomPass.strength = bStr; s.bloomPass._themeStrength = bStr;
+      s.bloomPass.radius = { day: 0.4, sunset: 0.4, night: 0.5, retro: 0.7 }[timeOfDay];
+    }
     // Hemisphere light
     if (s.hemiL) {
-      const hemiConfigs = { day: [0x88bbff, 0x445522, 0.3], sunset: [0xff8844, 0x332211, 0.25], night: [0x112244, 0x111111, 0.1], retro: [0x660088, 0x110022, 0.2] };
+      const hemiConfigs = {
+        day: [0x88bbff, 0x445522, 0.3], sunset: [0xff8844, 0x332211, 0.25],
+        night: [0x1a2a55, 0x0a0a15, 0.18],  // cool blue moonlit fill
+        retro: [0x8800cc, 0x1a0033, 0.25]    // purple neon wash
+      };
       const hc2 = hemiConfigs[timeOfDay]; s.hemiL.color.set(hc2[0]); s.hemiL.groundColor.set(hc2[1]); s.hemiL.intensity = hc2[2];
     }
-    // Tone mapping exposure
-    if (s.renderer) s.renderer.toneMappingExposure = { day: 1.1, sunset: 1.0, night: 0.85, retro: 0.95 }[timeOfDay];
-    if (s.gndMat) s.gndMat.color.set(timeOfDay === "retro" ? 0x0a0020 : ({ forest: 0x4a7a3a, sakura: 0x5a8a4a, city: 0x3a3a3a })[sceneryTheme] || 0x4a7a3a);
-    if (s.roadMat) s.roadMat.color.set(timeOfDay === "retro" ? 0x110022 : 0x333333);
-    if (s.retroSun) s.retroSun.visible = timeOfDay === "retro";
-    if (s.retroGrid) s.retroGrid.visible = timeOfDay === "retro";
-    if (s.fillL) { s.fillL.intensity = { day: 0.4, sunset: 0.3, night: 0.5, retro: 0.6 }[timeOfDay]; s.fillL.color.set(timeOfDay === "retro" ? 0x6600aa : 0x4466aa); }
-    if (s.dashL) s.dashL.intensity = { day: 0.2, sunset: 0.15, night: 0.3, retro: 0.2 }[timeOfDay];
-    // Background vis
-    if (s.stars) { s.stars.visible = timeOfDay === "night" || timeOfDay === "retro"; s.starMat.color.set(timeOfDay === "retro" ? 0xff88ff : 0xffffff); }
-    if (s.clouds) s.clouds.forEach(c => { c.visible = timeOfDay === "day" || timeOfDay === "sunset"; c.children.forEach(p => { if (timeOfDay === "sunset") { p.material.color.set(0xffaa77); p.material.opacity = 0.6; } else { p.material.color.set(0xffffff); p.material.opacity = 0.7; } }); });
-    if (s.shooters) s.shooters.forEach(ss => { ss.visible = timeOfDay === "night"; });
-    if (s.birds) s.birds.forEach(b => { b.visible = timeOfDay === "day" || timeOfDay === "sunset"; });
-    if (s.pMat) {
-      if (sceneryTheme === "sakura") { s.pMat.color.set(0xffb7c5); s.pMat.size = 0.5; s.pMat.opacity = 0.8; }
-      else if (sceneryTheme === "city") { s.pMat.color.set(timeOfDay === "retro" ? 0xff44ff : 0xaaaaaa); s.pMat.size = 0.2; s.pMat.opacity = 0.4; }
-      else { s.pMat.color.set(timeOfDay === "night" ? 0x88ffaa : timeOfDay === "retro" ? 0xff44ff : 0x99cc77); s.pMat.size = timeOfDay === "night" ? 0.3 : 0.25; s.pMat.opacity = timeOfDay === "night" ? 0.7 : 0.3; }
+    // Vignette — stronger for night/retro for cinematic feel
+    if (s.vignettePass) {
+      s.vignettePass.uniforms.darkness.value = { day: 0.4, sunset: 0.5, night: 0.65, retro: 0.55 }[timeOfDay];
     }
+    // Tone mapping exposure
+    if (s.renderer) s.renderer.toneMappingExposure = { day: 1.1, sunset: 1.0, night: 0.9, retro: 1.0 }[timeOfDay];
+    // Ground and road
+    if (s.gndMat) {
+      if (isRetro) s.gndMat.color.set(0x0a0020);
+      else if (isNight) s.gndMat.color.set(({ forest: 0x1a2a18, sakura: 0x1a2a1a, city: 0x1a1a1a })[sceneryTheme] || 0x1a2a18);
+      else s.gndMat.color.set(({ forest: 0x4a7a3a, sakura: 0x5a8a4a, city: 0x3a3a3a })[sceneryTheme] || 0x4a7a3a);
+    }
+    if (s.roadMat) s.roadMat.color.set(isRetro ? 0x110022 : isNight ? 0x222233 : 0x333333);
+    // Retro elements
+    if (s.retroSun) s.retroSun.visible = isRetro;
+    if (s.retroGrid) { s.retroGrid.visible = isRetro; if (isRetro) s.retroGrid.material.opacity = 0.35; }
+    // Interior lights
+    if (s.fillL) {
+      s.fillL.intensity = { day: 0.4, sunset: 0.3, night: 0.6, retro: 0.8 }[timeOfDay];
+      s.fillL.color.set(isRetro ? 0x8800cc : isNight ? 0x3355aa : 0x4466aa);
+    }
+    if (s.dashL) {
+      s.dashL.intensity = { day: 0.2, sunset: 0.15, night: 0.4, retro: 0.5 }[timeOfDay];
+      s.dashL.color.set(isRetro ? 0xff44ff : isNight ? 0x6688cc : 0xffffff);
+    }
+    // Stars
+    if (s.stars) {
+      s.stars.visible = isNight || isRetro;
+      s.starMat.color.set(isRetro ? 0xff88ff : 0xddeeff);
+      s.starMat.opacity = isRetro ? 0.7 : 0.9;
+      s.starMat.size = isRetro ? 0.8 : 1.0;
+    }
+    // Clouds
+    if (s.clouds) s.clouds.forEach(c => { c.visible = timeOfDay === "day" || timeOfDay === "sunset"; c.children.forEach(p => { if (timeOfDay === "sunset") { p.material.color.set(0xffaa77); p.material.opacity = 0.6; } else { p.material.color.set(0xffffff); p.material.opacity = 0.7; } }); });
+    if (s.shooters) s.shooters.forEach(ss => { ss.visible = isNight; });
+    if (s.birds) s.birds.forEach(b => { b.visible = timeOfDay === "day" || timeOfDay === "sunset"; });
+    // Particles
+    if (s.pMat) {
+      if (sceneryTheme === "sakura") { s.pMat.color.set(isNight ? 0xffaacc : isRetro ? 0xff66dd : 0xffb7c5); s.pMat.size = isRetro ? 0.6 : 0.5; s.pMat.opacity = isNight ? 0.5 : 0.8; }
+      else if (sceneryTheme === "city") { s.pMat.color.set(isRetro ? 0xff44ff : isNight ? 0x88aacc : 0xaaaaaa); s.pMat.size = 0.2; s.pMat.opacity = 0.4; }
+      else { s.pMat.color.set(isNight ? 0x66ccaa : isRetro ? 0xff44ff : 0x99cc77); s.pMat.size = isNight ? 0.35 : 0.25; s.pMat.opacity = isNight ? 0.5 : 0.3; }
+    }
+    // Label materials — theme-reactive glow
+    if (s.labels) s.labels.forEach(lbl => {
+      const ud = lbl.userData;
+      if (ud.bodyMat) { ud.bodyMat.emissive.set(isRetro ? 0xff00ff : isNight ? 0x2244aa : 0xff2200); ud.bodyMat.emissiveIntensity = isNight ? 0.25 : isRetro ? 0.35 : 0.15; }
+      if (ud.stripeMat) { ud.stripeMat.emissive.set(isRetro ? 0xff00ff : 0xff0000); ud.stripeMat.emissiveIntensity = isNight ? 0.8 : isRetro ? 1.0 : 0.6; }
+      if (ud.plateMat) { ud.plateMat.emissive.set(isRetro ? 0xff44ff : 0xffaa00); ud.plateMat.emissiveIntensity = isNight ? 0.5 : isRetro ? 0.6 : 0.3; }
+      if (ud.ring) { ud.ring.material.color.set(isRetro ? 0xff00ff : isNight ? 0x4488ff : 0xff4400); ud.ring.material.opacity = isNight ? 0.8 : isRetro ? 0.9 : 0.6; }
+    });
   }, [timeOfDay, sceneryTheme]);
 
   useEffect(() => {
