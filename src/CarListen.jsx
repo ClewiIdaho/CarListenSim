@@ -26,11 +26,13 @@ export default function CarListen() {
   const shakeRef = useRef(0);
   const tracksRef = useRef([]);
 
-  // --- Spatial Audio: car cabin speaker chain ---
+  // --- Spatial Audio: car cabin speaker chain + SFX ---
   const initAudioCtx = () => {
     if (audioCtxRef.current) return audioCtxRef.current;
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const rate = ctx.sampleRate;
+
+    // Cabin impulse response (short reverb for small enclosed space)
     const len = Math.floor(rate * 0.35);
     const impulse = ctx.createBuffer(2, len, rate);
     for (let ch = 0; ch < 2; ch++) {
@@ -38,30 +40,107 @@ export default function CarListen() {
       for (let i = 0; i < len; i++) { const t = i / rate; d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 12) * (i < rate * 0.02 ? 0.6 : 1) * 0.4; }
     }
     const convolver = ctx.createConvolver(); convolver.buffer = impulse;
-    const cabinLPF = ctx.createBiquadFilter(); cabinLPF.type = "lowpass"; cabinLPF.frequency.value = 8000; cabinLPF.Q.value = 0.7;
+
+    // Music chain: bass boost → cabin LPF → stereo panners with delay → dry mix
     const bassBoost = ctx.createBiquadFilter(); bassBoost.type = "peaking"; bassBoost.frequency.value = 80; bassBoost.gain.value = 6; bassBoost.Q.value = 1.2;
+    const cabinLPF = ctx.createBiquadFilter(); cabinLPF.type = "lowpass"; cabinLPF.frequency.value = 8000; cabinLPF.Q.value = 0.7;
+    // Speaker distance delays (L speaker slightly closer = ~0.3ms, R speaker ~0.6ms from driver)
+    const delayL = ctx.createDelay(0.01); delayL.delayTime.value = 0.0003;
+    const delayR = ctx.createDelay(0.01); delayR.delayTime.value = 0.0006;
     const panL = ctx.createStereoPanner(); panL.pan.value = -0.6;
     const panR = ctx.createStereoPanner(); panR.pan.value = 0.6;
     const dryGain = ctx.createGain(); dryGain.gain.value = 0.7;
     const wetGain = ctx.createGain(); wetGain.gain.value = 0.35;
     const masterGain = ctx.createGain(); masterGain.gain.value = 1.0;
-    // Permanent downstream chain (set up once)
+    // Permanent downstream chain
     bassBoost.connect(cabinLPF);
-    cabinLPF.connect(panL); cabinLPF.connect(panR);
-    panL.connect(dryGain); panR.connect(dryGain);
+    cabinLPF.connect(delayL).connect(panL).connect(dryGain);
+    cabinLPF.connect(delayR).connect(panR).connect(dryGain);
     dryGain.connect(masterGain);
     convolver.connect(wetGain); wetGain.connect(masterGain);
     masterGain.connect(ctx.destination);
-    // Road noise
+
+    // === ROAD NOISE (low rumble, tire texture) ===
     const noiseNode = ctx.createBufferSource();
     const noiseBuf = ctx.createBuffer(1, Math.floor(rate * 2), rate);
     const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
     noiseNode.buffer = noiseBuf; noiseNode.loop = true;
-    const noiseLPF = ctx.createBiquadFilter(); noiseLPF.type = "lowpass"; noiseLPF.frequency.value = 200; noiseLPF.Q.value = 0.5;
+    const noiseLPF = ctx.createBiquadFilter(); noiseLPF.type = "lowpass"; noiseLPF.frequency.value = 250; noiseLPF.Q.value = 0.5;
     const noiseGain = ctx.createGain(); noiseGain.gain.value = 0;
     noiseNode.connect(noiseLPF).connect(noiseGain).connect(ctx.destination); noiseNode.start();
-    audioCtxRef.current = { ctx, convolver, bassBoost, noiseGain, activeSource: null };
+
+    // === ENGINE DRONE (oscillator-based, pitches up with speed) ===
+    const engOsc1 = ctx.createOscillator(); engOsc1.type = "sawtooth"; engOsc1.frequency.value = 35;
+    const engOsc2 = ctx.createOscillator(); engOsc2.type = "triangle"; engOsc2.frequency.value = 70;
+    const engLPF = ctx.createBiquadFilter(); engLPF.type = "lowpass"; engLPF.frequency.value = 120; engLPF.Q.value = 1.5;
+    const engGain = ctx.createGain(); engGain.gain.value = 0;
+    engOsc1.connect(engLPF); engOsc2.connect(engLPF);
+    engLPF.connect(engGain).connect(ctx.destination);
+    engOsc1.start(); engOsc2.start();
+
+    // === WIND NOISE (high-freq hiss, increases with speed) ===
+    const windNode = ctx.createBufferSource();
+    const windBuf = ctx.createBuffer(1, Math.floor(rate * 2), rate);
+    const wd = windBuf.getChannelData(0); for (let i = 0; i < wd.length; i++) wd[i] = Math.random() * 2 - 1;
+    windNode.buffer = windBuf; windNode.loop = true;
+    const windHPF = ctx.createBiquadFilter(); windHPF.type = "highpass"; windHPF.frequency.value = 2500; windHPF.Q.value = 0.3;
+    const windLPF = ctx.createBiquadFilter(); windLPF.type = "lowpass"; windLPF.frequency.value = 6000; windLPF.Q.value = 0.5;
+    const windGain = ctx.createGain(); windGain.gain.value = 0;
+    windNode.connect(windHPF).connect(windLPF).connect(windGain).connect(ctx.destination); windNode.start();
+
+    audioCtxRef.current = { ctx, convolver, bassBoost, noiseGain, engOsc1, engOsc2, engLPF, engGain, windGain, activeSource: null };
     return audioCtxRef.current;
+  };
+
+  // === SFX: Record collect (coin ping) ===
+  const playCollectSFX = () => {
+    const ac = audioCtxRef.current; if (!ac) return;
+    const ctx = ac.ctx, t = ctx.currentTime;
+    // Bright ascending double-ping (like a coin)
+    const osc1 = ctx.createOscillator(); osc1.type = "sine";
+    osc1.frequency.setValueAtTime(988, t);       // B5
+    osc1.frequency.setValueAtTime(1319, t + 0.07); // E6
+    const osc2 = ctx.createOscillator(); osc2.type = "sine";
+    osc2.frequency.setValueAtTime(1568, t + 0.04); // G6 shimmer
+    const g1 = ctx.createGain();
+    g1.gain.setValueAtTime(0.18, t);
+    g1.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    const g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0.001, t);
+    g2.gain.linearRampToValueAtTime(0.1, t + 0.04);
+    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    osc1.connect(g1).connect(ctx.destination);
+    osc2.connect(g2).connect(ctx.destination);
+    osc1.start(t); osc1.stop(t + 0.25);
+    osc2.start(t + 0.03); osc2.stop(t + 0.25);
+  };
+
+  // === SFX: Label crash (impact + noise) ===
+  const playHitSFX = () => {
+    const ac = audioCtxRef.current; if (!ac) return;
+    const ctx = ac.ctx, t = ctx.currentTime;
+    // Low impact thud
+    const osc = ctx.createOscillator(); osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(90, t);
+    osc.frequency.exponentialRampToValueAtTime(20, t + 0.35);
+    // Noise burst (crunch)
+    const nBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.4), ctx.sampleRate);
+    const nD = nBuf.getChannelData(0); for (let i = 0; i < nD.length; i++) nD[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource(); noise.buffer = nBuf;
+    const bpf = ctx.createBiquadFilter(); bpf.type = "bandpass"; bpf.frequency.value = 900; bpf.Q.value = 1.5;
+    // Distortion waveshaper for crunch
+    const dist = ctx.createWaveShaper();
+    const curve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) { const x = (i / 128) - 1; curve[i] = (Math.PI + 3.5) * x / (Math.PI + 3.5 * Math.abs(x)); }
+    dist.curve = curve;
+    // Mix
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.35, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    osc.connect(g).connect(ctx.destination);
+    noise.connect(bpf).connect(dist).connect(g);
+    osc.start(t); osc.stop(t + 0.5);
+    noise.start(t); noise.stop(t + 0.45);
   };
 
   const connectTrack = (track) => {
@@ -125,7 +204,7 @@ export default function CarListen() {
   const nextTrack = () => { const all = tracksRef.current; if (all.length < 2) return; playTrack((trackIdx + 1) % all.length); };
   const prevTrack = () => { const all = tracksRef.current; if (all.length < 2) return; playTrack((trackIdx - 1 + all.length) % all.length); };
 
-  const startGame = () => { setInLobby(false); if (tracksRef.current.length > 0) playTrack(0); };
+  const startGame = () => { initAudioCtx(); setInLobby(false); if (tracksRef.current.length > 0) playTrack(0); };
 
   const restart = () => { const s = sceneRef.current; aliveRef.current = true; setAlive(true); scoreRef.current = 0; setScore(0); carRef.current = { speed: 0, steering: 0, posX: 0, angle: 0 }; if (s.records) s.records.forEach((r, i) => { r.visible = true; r.position.z = -40 - i * 35; r.position.x = (Math.random() - 0.5) * 10; }); if (s.labels) s.labels.forEach((m, i) => { m.visible = true; m.position.z = -60 - i * 50; m.position.x = (Math.random() - 0.5) * 10; }); if (s.explosion) s.explosion.visible = false; if (s.roadGroup) s.roadGroup.position.x = 0; };
 
@@ -441,10 +520,10 @@ export default function CarListen() {
       s.sceneryPool.forEach(o => { o.position.z += spd * dt; o.position.x -= latD; if (o.position.z > 60) { o.position.z -= s.spawnRange; const sd = Math.random() > 0.5 ? 1 : -1; const mt = o.userData.isMountain; o.position.x = sd * ((mt ? (o.userData.radius || 50) + 20 : 14) + Math.random() * (mt ? 120 : 80)) - car.posX; } });
 
       // Records
-      s.records.forEach(rec => { if (!rec.visible) return; rec.position.z += spd * dt; rec.position.x -= latD; rec.rotation.z += dt * 3; rec.position.y = 1.2 + Math.sin(now * 0.003 + rec.userData.bobPhase) * 0.3; if (rec.position.z > 30) { rec.position.z = -300 - Math.random() * 200; rec.position.x = (Math.random() - 0.5) * 10 - car.posX; rec.visible = true; } if (Math.abs(rec.position.x) < 1.8 && Math.abs(rec.position.z) < 2.5) { rec.visible = false; scoreRef.current += 100; setScore(scoreRef.current); setFlash("record"); setTimeout(() => setFlash(null), 300); setTimeout(() => { rec.visible = true; rec.position.z = -300 - Math.random() * 200; rec.position.x = (Math.random() - 0.5) * 10 - car.posX; }, 2000); } });
+      s.records.forEach(rec => { if (!rec.visible) return; rec.position.z += spd * dt; rec.position.x -= latD; rec.rotation.z += dt * 3; rec.position.y = 1.2 + Math.sin(now * 0.003 + rec.userData.bobPhase) * 0.3; if (rec.position.z > 30) { rec.position.z = -300 - Math.random() * 200; rec.position.x = (Math.random() - 0.5) * 10 - car.posX; rec.visible = true; } if (Math.abs(rec.position.x) < 1.8 && Math.abs(rec.position.z) < 2.5) { rec.visible = false; scoreRef.current += 100; setScore(scoreRef.current); playCollectSFX(); setFlash("record"); setTimeout(() => setFlash(null), 300); setTimeout(() => { rec.visible = true; rec.position.z = -300 - Math.random() * 200; rec.position.x = (Math.random() - 0.5) * 10 - car.posX; }, 2000); } });
 
       // Labels
-      s.labels.forEach(lbl => { if (!lbl.visible) return; lbl.position.z += spd * dt; lbl.position.x -= latD; lbl.rotation.y += dt * 1.5; if (lbl.userData.light) lbl.userData.light.material.opacity = Math.sin(now * 0.01) > 0 ? 1 : 0.2; if (lbl.position.z > 30) { lbl.position.z = -350 - Math.random() * 250; lbl.position.x = (Math.random() - 0.5) * 10 - car.posX; lbl.visible = true; } if (Math.abs(lbl.position.x) < 1.5 && Math.abs(lbl.position.z) < 2) { aliveRef.current = false; setAlive(false); setFlash("boom"); if (scoreRef.current > hiRef.current) { hiRef.current = scoreRef.current; setHighScore(scoreRef.current); } if (s.explosion) { s.explosion.position.copy(lbl.position); s.explosion.visible = true; s.explosion.children.forEach(ch => { ch.material.opacity = 0.8; ch.scale.set(1, 1, 1); }); } lbl.visible = false; car.speed = 0; shakeRef.current = 0.12; } });
+      s.labels.forEach(lbl => { if (!lbl.visible) return; lbl.position.z += spd * dt; lbl.position.x -= latD; lbl.rotation.y += dt * 1.5; if (lbl.userData.light) lbl.userData.light.material.opacity = Math.sin(now * 0.01) > 0 ? 1 : 0.2; if (lbl.position.z > 30) { lbl.position.z = -350 - Math.random() * 250; lbl.position.x = (Math.random() - 0.5) * 10 - car.posX; lbl.visible = true; } if (Math.abs(lbl.position.x) < 1.5 && Math.abs(lbl.position.z) < 2) { aliveRef.current = false; setAlive(false); setFlash("boom"); if (scoreRef.current > hiRef.current) { hiRef.current = scoreRef.current; setHighScore(scoreRef.current); } if (s.explosion) { s.explosion.position.copy(lbl.position); s.explosion.visible = true; s.explosion.children.forEach(ch => { ch.material.opacity = 0.8; ch.scale.set(1, 1, 1); }); } lbl.visible = false; car.speed = 0; shakeRef.current = 0.12; playHitSFX(); } });
 
       // Retro grid
       if (s.retroGrid && s.retroGrid.visible) s.retroGrid.position.x = -car.posX;
@@ -487,11 +566,22 @@ export default function CarListen() {
         s.speedoNeedle.rotation.z += (targetAngle - s.speedoNeedle.rotation.z) * (1 - Math.exp(-6 * dt));
       }
 
-      // Road noise tied to speed (framerate-independent smoothing)
+      // === DRIVING AUDIO (all framerate-independent) ===
       if (audioCtxRef.current) {
-        const ng = audioCtxRef.current.noiseGain;
-        const vol = Math.min(car.speed / 120, 1) * 0.06;
-        ng.gain.value += (vol - ng.gain.value) * (1 - Math.exp(-5 * dt));
+        const ac = audioCtxRef.current;
+        const sf = Math.min(car.speed / 120, 1); // speed fraction 0-1
+        const smooth = 1 - Math.exp(-5 * dt);
+        // Road noise: tire rumble increases with speed
+        ac.noiseGain.gain.value += (sf * 0.05 - ac.noiseGain.gain.value) * smooth;
+        // Engine drone: pitch sweeps 35→115Hz, volume ramps up, LPF opens with speed
+        const engFreq = 35 + sf * 80;
+        ac.engOsc1.frequency.value += (engFreq - ac.engOsc1.frequency.value) * smooth;
+        ac.engOsc2.frequency.value += (engFreq * 2 - ac.engOsc2.frequency.value) * smooth;
+        ac.engGain.gain.value += ((0.012 + sf * 0.035) - ac.engGain.gain.value) * smooth;
+        ac.engLPF.frequency.value += ((80 + sf * 200) - ac.engLPF.frequency.value) * smooth;
+        // Wind noise: silent until ~30mph, ramps up above that
+        const windVol = Math.max(0, (sf - 0.25) / 0.75) * 0.04;
+        ac.windGain.gain.value += (windVol - ac.windGain.gain.value) * smooth;
       }
 
       renderer.render(s.scene, s.camera);
