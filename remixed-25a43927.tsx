@@ -12,6 +12,7 @@ export default function CarListen() {
   const [highScore, setHighScore] = useState(0);
   const [alive, setAlive] = useState(true);
   const [flash, setFlash] = useState(null);
+  const [isMobile, setIsMobile] = useState(false);
   const audioRef = useRef(null);
   const animRef = useRef(null);
   const sceneRef = useRef({});
@@ -25,6 +26,25 @@ export default function CarListen() {
   const handleFile = e => { const f = e.target.files[0]; if (!f) return; if (audioRef.current) audioRef.current.pause(); audioRef.current = new Audio(URL.createObjectURL(f)); setAudioName(f.name.replace(/\.[^/.]+$/, "")); setIsPlaying(false); };
   const togglePlay = () => { if (!audioRef.current) return; if (isPlaying) audioRef.current.pause(); else audioRef.current.play(); setIsPlaying(!isPlaying); };
   const restart = () => { const s = sceneRef.current; aliveRef.current = true; setAlive(true); scoreRef.current = 0; setScore(0); carRef.current = { speed: 0, steering: 0, posX: 0, angle: 0 }; if (s.records) s.records.forEach((r, i) => { r.visible = true; r.position.z = -40 - i * 35; r.position.x = (Math.random() - 0.5) * 10; }); if (s.labels) s.labels.forEach((m, i) => { m.visible = true; m.position.z = -60 - i * 50; m.position.x = (Math.random() - 0.5) * 10; }); if (s.explosion) s.explosion.visible = false; if (s.roadGroup) s.roadGroup.position.x = 0; };
+
+  // Mobile detection
+  useEffect(() => {
+    const check = () => {
+      const touch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+      const narrow = window.innerWidth < 900;
+      setIsMobile(touch && narrow);
+    };
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  // Touch control helpers
+  const touchOn = useCallback((key) => (e) => { e.preventDefault(); keysRef.current[key] = true; }, []);
+  const touchOff = useCallback((key) => (e) => { e.preventDefault(); keysRef.current[key] = false; }, []);
+
+  // Shared touch button style
+  const touchBtnBase = { border: "none", outline: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "monospace", fontWeight: 700, WebkitTapHighlightColor: "transparent", userSelect: "none", WebkitUserSelect: "none" };
 
   // Scenery factories
   const mkTree = (x, z) => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 5), new THREE.MeshLambertMaterial({ color: 0x5c3a1e }))); [0x1a6b3c, 0x22874a, 0x0f5132].forEach((c, i) => { const l = new THREE.Mesh(new THREE.ConeGeometry(2.5 - i * 0.6, 4, 7), new THREE.MeshLambertMaterial({ color: c })); l.position.y = 3.5 + i * 2.2; l.castShadow = true; g.add(l); }); g.position.set(x, 2.5, z); g.scale.setScalar(0.8 + Math.random() * 0.8); return g; };
@@ -363,53 +383,104 @@ export default function CarListen() {
     }; draw(); return () => cancelAnimationFrame(fid);
   }, [audioName, isPlaying]);
 
+  const glassPanel = { background: "rgba(0,0,0,0.75)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.06)", color: "#fff" };
+
   return (
-    <div style={{ width: "100vw", height: "100vh", background: "#000", position: "relative", overflow: "hidden" }}>
+    <div style={{ width: "100vw", height: "100dvh", background: "#000", position: "relative", overflow: "hidden", touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}>
       <div ref={mountRef} style={{ width: "100%", height: "100%" }} />
       {flash && <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: flash === "record" ? "rgba(255,215,0,0.15)" : "rgba(255,0,0,0.25)", transition: "opacity 0.3s" }} />}
-      <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 16, alignItems: "center" }}>
-        <div style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", borderRadius: 12, padding: "8px 18px", color: "#fff", border: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
-          <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: 2 }}>SCORE</div>
-          <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "monospace", color: "#ffdd00" }}>{score}</div>
+
+      {/* Score - top center */}
+      <div style={{ position: "absolute", top: isMobile ? 8 : 16, left: "50%", transform: "translateX(-50%)", display: "flex", gap: isMobile ? 8 : 16, alignItems: "center" }}>
+        <div style={{ ...glassPanel, borderRadius: 12, padding: isMobile ? "4px 12px" : "8px 18px", textAlign: "center" }}>
+          <div style={{ fontSize: isMobile ? 8 : 10, opacity: 0.5, letterSpacing: 2 }}>SCORE</div>
+          <div style={{ fontSize: isMobile ? 20 : 28, fontWeight: 700, fontFamily: "monospace", color: "#ffdd00" }}>{score}</div>
         </div>
-        {highScore > 0 && <div style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", borderRadius: 12, padding: "8px 14px", color: "#fff", border: "1px solid rgba(255,215,0,0.15)", textAlign: "center" }}>
-          <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: 2 }}>HIGH</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace", color: "#ff8800" }}>{highScore}</div>
+        {highScore > 0 && <div style={{ ...glassPanel, borderRadius: 12, padding: isMobile ? "4px 10px" : "8px 14px", border: "1px solid rgba(255,215,0,0.15)", textAlign: "center" }}>
+          <div style={{ fontSize: isMobile ? 8 : 10, opacity: 0.5, letterSpacing: 2 }}>HIGH</div>
+          <div style={{ fontSize: isMobile ? 16 : 22, fontWeight: 700, fontFamily: "monospace", color: "#ff8800" }}>{highScore}</div>
         </div>}
       </div>
-      {!alive && <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
-        <div style={{ fontSize: 56, fontWeight: 900, color: "#ff3333", textShadow: "0 0 30px rgba(255,0,0,0.5)", letterSpacing: 4 }}>SIGNED 📝</div>
-        <div style={{ fontSize: 16, color: "#fff", marginTop: 6, opacity: 0.5 }}>The label got you...</div>
-        <div style={{ fontSize: 20, color: "#fff", marginTop: 12, opacity: 0.8 }}>Score: <span style={{ color: "#ffdd00", fontWeight: 700 }}>{score}</span></div>
-        {score >= highScore && score > 0 && <div style={{ fontSize: 16, color: "#ff8800", marginTop: 6 }}>🏆 NEW HIGH SCORE!</div>}
-        <button onClick={restart} style={{ marginTop: 24, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 12, padding: "12px 32px", color: "#fff", fontSize: 18, fontWeight: 700, cursor: "pointer", letterSpacing: 2 }} onMouseEnter={e => e.target.style.background = "rgba(255,255,255,0.25)"} onMouseLeave={e => e.target.style.background = "rgba(255,255,255,0.12)"}>RESTART</button>
+
+      {/* Game over overlay */}
+      {!alive && <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 20 }}>
+        <div style={{ fontSize: isMobile ? 36 : 56, fontWeight: 900, color: "#ff3333", textShadow: "0 0 30px rgba(255,0,0,0.5)", letterSpacing: 4 }}>SIGNED 📝</div>
+        <div style={{ fontSize: isMobile ? 13 : 16, color: "#fff", marginTop: 6, opacity: 0.5 }}>The label got you...</div>
+        <div style={{ fontSize: isMobile ? 16 : 20, color: "#fff", marginTop: 12, opacity: 0.8 }}>Score: <span style={{ color: "#ffdd00", fontWeight: 700 }}>{score}</span></div>
+        {score >= highScore && score > 0 && <div style={{ fontSize: isMobile ? 13 : 16, color: "#ff8800", marginTop: 6 }}>🏆 NEW HIGH SCORE!</div>}
+        <button onClick={restart} style={{ marginTop: 20, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 12, padding: isMobile ? "14px 36px" : "12px 32px", color: "#fff", fontSize: isMobile ? 16 : 18, fontWeight: 700, cursor: "pointer", letterSpacing: 2 }} onMouseEnter={e => e.target.style.background = "rgba(255,255,255,0.25)"} onMouseLeave={e => e.target.style.background = "rgba(255,255,255,0.12)"}>RESTART</button>
       </div>}
-      <div style={{ position: "absolute", bottom: 12, left: 16, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(12px)", borderRadius: 12, padding: "8px 14px", color: "#fff", display: "flex", alignItems: "center", gap: 10, maxWidth: 260, border: "1px solid rgba(255,255,255,0.06)" }}>
-        <label style={{ cursor: "pointer", background: "rgba(255,255,255,0.07)", borderRadius: 8, padding: "5px 10px", fontSize: 11, whiteSpace: "nowrap", border: "1px solid rgba(255,255,255,0.08)" }}>🎵<input type="file" accept="audio/*" onChange={handleFile} style={{ display: "none" }} /></label>
+
+      {/* Audio controls */}
+      <div style={{ position: "absolute", ...(isMobile ? { top: 8, left: 8, maxWidth: 180 } : { bottom: 12, left: 16, maxWidth: 260 }), ...glassPanel, borderRadius: 12, padding: isMobile ? "6px 10px" : "8px 14px", display: "flex", alignItems: "center", gap: isMobile ? 6 : 10 }}>
+        <label style={{ cursor: "pointer", background: "rgba(255,255,255,0.07)", borderRadius: 8, padding: isMobile ? "4px 8px" : "5px 10px", fontSize: 11, whiteSpace: "nowrap", border: "1px solid rgba(255,255,255,0.08)" }}>🎵<input type="file" accept="audio/*" onChange={handleFile} style={{ display: "none" }} /></label>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {audioName ? <div style={{ display: "flex", alignItems: "center", gap: 6 }}><button onClick={togglePlay} style={{ background: "none", border: "none", color: "#fff", fontSize: 16, cursor: "pointer", padding: 0 }}>{isPlaying ? "⏸" : "▶️"}</button><div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11 }}>{audioName}</div></div> : <div style={{ fontSize: 10, opacity: 0.35 }}>Upload a track 🎧</div>}
+          {audioName ? <div style={{ display: "flex", alignItems: "center", gap: 6 }}><button onClick={togglePlay} style={{ background: "none", border: "none", color: "#fff", fontSize: 16, cursor: "pointer", padding: 0 }}>{isPlaying ? "⏸" : "▶️"}</button><div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: isMobile ? 10 : 11 }}>{audioName}</div></div> : <div style={{ fontSize: isMobile ? 9 : 10, opacity: 0.35 }}>Upload a track 🎧</div>}
         </div>
       </div>
-      <div style={{ position: "absolute", top: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
-        <div style={{ background: "rgba(0,0,0,0.78)", backdropFilter: "blur(12px)", borderRadius: 14, padding: "12px 18px", color: "#fff", textAlign: "center", border: "1px solid rgba(255,255,255,0.05)", minWidth: 90 }}>
-          <div style={{ fontSize: 32, fontWeight: 700, fontFamily: "monospace", color: currentSpeed > 80 ? "#ff6b6b" : "#4ade80" }}>{currentSpeed}</div>
-          <div style={{ fontSize: 10, opacity: 0.35, letterSpacing: 2 }}>MPH</div>
+
+      {/* Speed + Settings - top right */}
+      <div style={{ position: "absolute", top: isMobile ? 8 : 16, right: isMobile ? 8 : 16, display: "flex", flexDirection: "column", gap: isMobile ? 4 : 8, alignItems: "flex-end" }}>
+        <div style={{ ...glassPanel, borderRadius: isMobile ? 10 : 14, padding: isMobile ? "6px 12px" : "12px 18px", textAlign: "center", minWidth: isMobile ? 60 : 90 }}>
+          <div style={{ fontSize: isMobile ? 22 : 32, fontWeight: 700, fontFamily: "monospace", color: currentSpeed > 80 ? "#ff6b6b" : "#4ade80" }}>{currentSpeed}</div>
+          <div style={{ fontSize: isMobile ? 8 : 10, opacity: 0.35, letterSpacing: 2 }}>MPH</div>
         </div>
-        <div style={{ background: "rgba(0,0,0,0.68)", backdropFilter: "blur(12px)", borderRadius: 10, padding: "6px 8px", color: "#fff", display: "flex", gap: 4, border: "1px solid rgba(255,255,255,0.05)" }}>
-          {[{ k: "day", i: "☀️" }, { k: "sunset", i: "🌅" }, { k: "night", i: "🌙" }, { k: "retro", i: "🌆" }].map(({ k, i }) => (<button key={k} onClick={() => setTimeOfDay(k)} style={{ background: timeOfDay === k ? "rgba(255,255,255,0.12)" : "transparent", border: "none", borderRadius: 8, padding: "4px 10px", color: "#fff", fontSize: 16, cursor: "pointer" }}>{i}</button>))}
+        <div style={{ ...glassPanel, borderRadius: 10, padding: isMobile ? "3px 4px" : "6px 8px", display: "flex", gap: isMobile ? 2 : 4 }}>
+          {[{ k: "day", i: "☀️" }, { k: "sunset", i: "🌅" }, { k: "night", i: "🌙" }, { k: "retro", i: "🌆" }].map(({ k, i }) => (<button key={k} onClick={() => setTimeOfDay(k)} style={{ background: timeOfDay === k ? "rgba(255,255,255,0.12)" : "transparent", border: "none", borderRadius: 8, padding: isMobile ? "3px 7px" : "4px 10px", color: "#fff", fontSize: isMobile ? 14 : 16, cursor: "pointer" }}>{i}</button>))}
         </div>
-        <div style={{ background: "rgba(0,0,0,0.68)", backdropFilter: "blur(12px)", borderRadius: 10, padding: "6px 8px", color: "#fff", display: "flex", gap: 4, border: "1px solid rgba(255,255,255,0.05)" }}>
-          {[{ k: "forest", i: "🌲", l: "Forest" }, { k: "sakura", i: "🌸", l: "Sakura" }, { k: "city", i: "🏙️", l: "City" }].map(({ k, i, l }) => (<button key={k} onClick={() => setSceneryTheme(k)} style={{ background: sceneryTheme === k ? "rgba(255,255,255,0.12)" : "transparent", border: "none", borderRadius: 8, padding: "4px 10px", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><span style={{ fontSize: 16 }}>{i}</span>{l}</button>))}
+        <div style={{ ...glassPanel, borderRadius: 10, padding: isMobile ? "3px 4px" : "6px 8px", display: "flex", gap: isMobile ? 2 : 4 }}>
+          {[{ k: "forest", i: "🌲", l: "Forest" }, { k: "sakura", i: "🌸", l: "Sakura" }, { k: "city", i: "🏙️", l: "City" }].map(({ k, i, l }) => (<button key={k} onClick={() => setSceneryTheme(k)} style={{ background: sceneryTheme === k ? "rgba(255,255,255,0.12)" : "transparent", border: "none", borderRadius: 8, padding: isMobile ? "3px 6px" : "4px 10px", color: "#fff", fontSize: isMobile ? 10 : 12, cursor: "pointer", display: "flex", alignItems: "center", gap: isMobile ? 2 : 4 }}><span style={{ fontSize: isMobile ? 13 : 16 }}>{i}</span>{!isMobile && l}</button>))}
         </div>
       </div>
-      <div style={{ position: "absolute", bottom: 56, left: 16, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(12px)", borderRadius: 12, padding: "10px 16px", color: "#fff", border: "1px solid rgba(255,255,255,0.05)" }}>
+
+      {/* Keyboard instructions - desktop only */}
+      {!isMobile && <div style={{ position: "absolute", bottom: 56, left: 16, ...glassPanel, borderRadius: 12, padding: "10px 16px" }}>
         <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: 1 }}>CAR LISTEN 🎧</div>
         <div style={{ fontSize: 11, opacity: 0.45, marginTop: 4, lineHeight: 1.6 }}>
           <span style={{ color: "#4ade80" }}>SHIFT</span> accelerate · <span style={{ color: "#fbbf24" }}>SPACE</span> brake<br />
           <span style={{ color: "#60a5fa" }}>A/D</span> or <span style={{ color: "#60a5fa" }}>←/→</span> steer<br />
           <span style={{ color: "#ffdd00" }}>💿</span> collect records · <span style={{ color: "#ff4444" }}>🏢</span> dodge labels
         </div>
-      </div>
+      </div>}
+
+      {/* Touch controls - mobile only */}
+      {isMobile && alive && <>
+        {/* Steering - bottom left */}
+        <div style={{ position: "absolute", bottom: 20, left: 12, display: "flex", gap: 10, zIndex: 10 }}>
+          <button
+            onTouchStart={touchOn("ArrowLeft")}
+            onTouchEnd={touchOff("ArrowLeft")}
+            onTouchCancel={touchOff("ArrowLeft")}
+            onContextMenu={e => e.preventDefault()}
+            style={{ ...touchBtnBase, ...glassPanel, width: 66, height: 66, borderRadius: 16, fontSize: 24, background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)" }}
+          >◀</button>
+          <button
+            onTouchStart={touchOn("ArrowRight")}
+            onTouchEnd={touchOff("ArrowRight")}
+            onTouchCancel={touchOff("ArrowRight")}
+            onContextMenu={e => e.preventDefault()}
+            style={{ ...touchBtnBase, ...glassPanel, width: 66, height: 66, borderRadius: 16, fontSize: 24, background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)" }}
+          >▶</button>
+        </div>
+
+        {/* Gas / Brake - bottom right */}
+        <div style={{ position: "absolute", bottom: 20, right: 12, display: "flex", flexDirection: "column", gap: 8, zIndex: 10 }}>
+          <button
+            onTouchStart={touchOn("ShiftLeft")}
+            onTouchEnd={touchOff("ShiftLeft")}
+            onTouchCancel={touchOff("ShiftLeft")}
+            onContextMenu={e => e.preventDefault()}
+            style={{ ...touchBtnBase, width: 86, height: 58, borderRadius: 14, fontSize: 13, letterSpacing: 2, background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.3)", color: "#4ade80" }}
+          >GAS</button>
+          <button
+            onTouchStart={touchOn("Space")}
+            onTouchEnd={touchOff("Space")}
+            onTouchCancel={touchOff("Space")}
+            onContextMenu={e => e.preventDefault()}
+            style={{ ...touchBtnBase, width: 86, height: 58, borderRadius: 14, fontSize: 13, letterSpacing: 2, background: "rgba(255,107,107,0.15)", border: "1px solid rgba(255,107,107,0.3)", color: "#ff6b6b" }}
+          >BRAKE</button>
+        </div>
+      </>}
     </div>
   );
 }
